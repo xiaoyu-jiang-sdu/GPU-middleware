@@ -10,7 +10,9 @@ Operator 层只允许通过本接口调用底层计算资源，
 
 
 class BackendAdapter(ABC):
-    # ================= 张量 =================
+    # =========================
+    # 张量管理
+    # =========================
     @abstractmethod
     def tensor(self, data):
         # 创建张量
@@ -21,7 +23,9 @@ class BackendAdapter(ABC):
         # 张量拷贝转换为numpy
         pass
 
-    # ================= 矩阵运算 =================
+    # =========================
+    # 基础算子
+    # =========================
     @abstractmethod
     def add(self, a, b):
         # 逐元素加法
@@ -36,19 +40,6 @@ class BackendAdapter(ABC):
     def relu(self, x):
         pass
 
-    # ================= 卷积 =================
-    @abstractmethod
-    def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0)):
-        # 2d卷积
-        pass
-
-    # ================= 池化 =================
-    @abstractmethod
-    def global_avg_pool(self, x):
-        # 全局平均池化
-        pass
-
-    # ================= 张量变换 =================
     @abstractmethod
     def transpose(self, x):
         # 转置
@@ -59,10 +50,29 @@ class BackendAdapter(ABC):
         # 张量与标量相乘
         pass
 
+    # =========================
+    # CNN算子
+    # =========================
+    @abstractmethod
+    def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0)):
+        # 2d卷积
+        pass
+
+    @abstractmethod
+    def global_avg_pool(self, x):
+        # 全局平均池化
+        pass
+
     @abstractmethod
     def max_pool2d(self, x, kernel_size, stride, padding):
         pass
 
     @abstractmethod
     def flatten(self, x, axis):
+        pass
+
+    # =========================
+    # 归一化
+    # =========================
+    def batch_norm_2d(self, x, weight, bias, running_mean, running_var, eps):
         pass
