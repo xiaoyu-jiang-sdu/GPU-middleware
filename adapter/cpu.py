@@ -50,7 +50,6 @@ class CpuAdapter(BackendAdapter):
     # CNN算子
     # =========================
     def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0)):
-        """二维卷积"""
         x, w = self.tensor(x), self.tensor(w)
         if b is not None:
             b = self.tensor(b)
