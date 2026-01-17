@@ -1,24 +1,20 @@
-//
-// Created by 31437 on 26-1-16.
-//
-
-#ifndef DCU_CONTEXT_H
-#define DCU_CONTEXT_H
-
-#endif //DCU_CONTEXT_H
 #pragma once
 #include <hip/hip_runtime.h>
 #include <miopen/miopen.h>
 #include <rocblas/rocblas.h>
+#include "context.h"
 
 namespace dcu {
 
-class DCUContext {
+class DCUContext : public engine::Context {
 public:
     DCUContext();
     ~DCUContext();
 
-    miopenHandle_t& get_handle() { return miopen_; }
+    void sync() override { hipStreamSynchronize(stream_); }
+
+    hipStream_t& get_stream() { return stream_; }
+    miopenHandle_t& get_miopen() { return miopen_; }
     rocblas_handle& get_rocblas() { return rocblas_; }
 
 private:

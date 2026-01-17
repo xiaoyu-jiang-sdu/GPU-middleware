@@ -7,6 +7,8 @@ add_compile_definitions(__HIP_PLATFORM_AMD__=1)
 # 用 hipcc 编译
 set(CMAKE_C_COMPILER /opt/dtk/bin/hipcc)
 set(CMAKE_CXX_COMPILER /opt/dtk/bin/hipcc)
+
+# 设置 C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -19,15 +21,17 @@ include_directories(
     ${DTK_ROOT}/include
 )
 
+link_directories(${DTK_ROOT}/lib)
+
 # 收集所有 cpp 文件
 file(GLOB_RECURSE ENGINE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
 
-# 静态库 dcu_engine
+# 创建静态库 dcu_engine
 add_library(dcu_engine STATIC ${ENGINE_SOURCES})
 
-# 链接 DTK 库（使用绝对路径，确保找到库）
+# 链接 DTK 库（使用绝对路径）
 target_link_libraries(dcu_engine
     PRIVATE
     ${DTK_ROOT}/lib/libamdhip64.so
@@ -41,7 +45,7 @@ target_link_libraries(dcu_engine
 # 测试可执行文件
 add_executable(test_engine src/test_engine.cpp)
 
-# 链接 dcu_engine 静态库和 DTK 库
+# 链接静态库和 DTK 库
 target_link_libraries(test_engine
     PRIVATE
     dcu_engine
@@ -53,7 +57,7 @@ target_link_libraries(test_engine
     ${DTK_ROOT}/lib/libhipblas.so
 )
 
-# 确保编译器能找到头文件
+# 编译器 include 路径
 target_include_directories(test_engine
     PRIVATE
     include
