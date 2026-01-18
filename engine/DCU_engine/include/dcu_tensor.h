@@ -3,6 +3,7 @@
 #include <hip/hip_runtime.h>
 #include "tensor.h"
 
+
 namespace dcu {
 
 class DCUTensor : public engine::Tensor {

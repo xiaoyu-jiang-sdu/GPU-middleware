@@ -3,6 +3,7 @@
 #include <miopen/miopen.h>
 #include <rocblas/rocblas.h>
 #include "context.h"
+#include "dcu_common.h"
 
 namespace dcu {
 
@@ -11,7 +12,7 @@ public:
     DCUContext();
     ~DCUContext();
 
-    void sync() override { hipStreamSynchronize(stream_); }
+    void sync() override { CHECK_HIP(hipStreamSynchronize(stream_)); }
 
     hipStream_t& get_stream() { return stream_; }
     miopenHandle_t& get_miopen() { return miopen_; }

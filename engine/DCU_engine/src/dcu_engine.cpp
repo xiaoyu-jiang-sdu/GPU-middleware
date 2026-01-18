@@ -7,6 +7,49 @@
 #include <iostream>
 
 namespace dcu {
+// ------------------------
+// 全局kernel函数
+// ------------------------
+__global__ void add_kernel(float* a, float* b, float* o, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) o[i] = a[i] + b[i];
+}
+
+__global__ void relu_kernel(float* x, float* o, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) o[i] = x[i] > 0 ? x[i] : 0;
+}
+
+__global__ void mul_scalar_kernel(float* x, float* o, float s, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) o[i] = x[i] * s;
+}
+
+__global__ void transpose_kernel(float* x, float* y,
+                                 int rows, int cols) {
+    int r = blockIdx.y * blockDim.y + threadIdx.y;
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (r < rows && c < cols) {
+        y[c * rows + r] = x[r * cols + c];
+    }
+}
+
+__global__ void gap_kernel(float* x, float* y, int HW) {
+    int c = blockIdx.x;
+    float sum = 0.0f;
+    for (int i = threadIdx.x; i < HW; i += blockDim.x)
+        sum += x[c * HW + i];
+    atomicAdd(&y[c], sum / HW);
+}
+
+// ------------------------
+// add 实现
+// ------------------------
+void DCUEngine::add(DCUTensor* a, DCUTensor* b, DCUTensor* o, int n, DCUContext*) {
+    hipLaunchKernelGGL(add_kernel,
+        dim3((n + 255) / 256), dim3(256), 0, 0,
+        (float*)a->data(), (float*)b->data(), (float*)o->data(), n);
+}
 
 // ------------------------
 // matmul 实现
@@ -26,18 +69,51 @@ void DCUEngine::matmul(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
                   &beta,
                   static_cast<float*>(Out->data()), N);
 }
-
 // ------------------------
-// conv2d_forward 实现
+// Relu 实现
 // ------------------------
-void DCUEngine::conv2d_forward(DCUTensor* x, DCUTensor* w, DCUTensor* y,
-                               int N, int C, int H, int W,
-                               int K, int R, int S,
-                               int stride_h, int stride_w,
-                               int pad_h, int pad_w,
-                               int dilation_h, int dilation_w,
-                               int groups,
-                               DCUContext* ctx)
+void DCUEngine::relu(DCUTensor* x, DCUTensor* o, int n, DCUContext*) {
+    hipLaunchKernelGGL(relu_kernel,
+        dim3((n + 255) / 256), dim3(256), 0, 0,
+        (float*)x->data(), (float*)o->data(), n);
+}
+// ------------------------
+// transpose 实现
+// ------------------------
+void DCUEngine::transpose(DCUTensor* x, DCUTensor* y,
+                          int rows, int cols,
+                          DCUContext*) {
+    dim3 block(16, 16);
+    dim3 grid((cols + 15) / 16, (rows + 15) / 16);
+    hipLaunchKernelGGL(transpose_kernel,
+        grid, block, 0, 0,
+        static_cast<float*>(x->data()),
+        static_cast<float*>(y->data()),
+        rows, cols);
+}
+// ------------------------
+// mul_scalar 实现
+// ------------------------
+void DCUEngine::mul_scalar(DCUTensor* x, DCUTensor* o,
+                           float s, int n,
+                           DCUContext*) {
+    hipLaunchKernelGGL(mul_scalar_kernel,
+        dim3((n + 255) / 256), dim3(256), 0, 0,
+        static_cast<float*>(x->data()),
+        static_cast<float*>(o->data()),
+        s, n);
+}
+// ------------------------
+// conv2d 实现
+// ------------------------
+void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
+                                int N, int C, int H, int W,
+                                int K, int R, int S,
+                                int stride_h, int stride_w,
+                                int pad_h, int pad_w,
+                                int dilation_h, int dilation_w,
+                                int groups,
+                                DCUContext* ctx)
 {
     float* x_data = static_cast<float*>(x->data());
     float* w_data = static_cast<float*>(w->data());
@@ -117,5 +193,123 @@ void DCUEngine::conv2d_forward(DCUTensor* x, DCUTensor* w, DCUTensor* y,
     miopenDestroyTensorDescriptor(y_desc);
     miopenDestroyConvolutionDescriptor(conv_desc);
 }
+// ------------------------
+// max_pool2d 实现
+// ------------------------
+void DCUEngine::max_pool2d(DCUTensor* x, DCUTensor* y,
+                                int N, int C, int H, int W,
+                                int kH, int kW,
+                                int sH, int sW,
+                                int pH, int pW,
+                                DCUContext* ctx)
+{
+    miopenTensorDescriptor_t x_desc, y_desc;
+    miopenCreateTensorDescriptor(&x_desc);
+    miopenCreateTensorDescriptor(&y_desc);
 
+    int outH = (H + 2 * pH - kH) / sH + 1;
+    int outW = (W + 2 * pW - kW) / sW + 1;
+
+    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
+    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, outH, outW);
+
+    miopenPoolingDescriptor_t pool_desc;
+    miopenCreatePoolingDescriptor(&pool_desc);
+    miopenSet2dPoolingDescriptor(
+        pool_desc,
+        miopenPoolingMax,
+        kH, kW,
+        pH, pW,
+        sH, sW
+    );
+
+    float alpha = 1.0f, beta = 0.0f;
+
+    miopenPoolingForward(
+        ctx->get_miopen(),
+        pool_desc,
+        &alpha,
+        x_desc, x->data(),
+        &beta,
+        y_desc, y->data(),
+        false, nullptr, 0
+    );
+
+    miopenDestroyPoolingDescriptor(pool_desc);
+    miopenDestroyTensorDescriptor(x_desc);
+    miopenDestroyTensorDescriptor(y_desc);
+}
+
+// ------------------------
+// flatten 实现
+// ------------------------
+void DCUEngine::global_avg_pool(
+    DCUTensor* x, DCUTensor* y,
+    int N, int C, int H, int W,
+    DCUContext*)
+{
+    int HW = H * W;
+    hipMemset(y->data(), 0, sizeof(float) * N * C);
+
+    dim3 grid(N * C);
+    dim3 block(256);
+
+    hipLaunchKernelGGL(gap_kernel,
+        grid, block, 0, 0,
+        static_cast<float*>(x->data()),
+        static_cast<float*>(y->data()),
+        HW);
+}
+
+
+// ------------------------
+// flatten 实现
+// ------------------------
+void DCUEngine::flatten(DCUTensor* x, DCUTensor* y,
+                        int outer, int inner, DCUContext*) {
+    hipMemcpy(y->data(), x->data(),
+              sizeof(float) * outer * inner,
+              hipMemcpyDeviceToDevice);
+}
+
+// ------------------------
+// BatchNorm2d 实现
+// ------------------------
+void DCUEngine::batch_norm_2d(
+    DCUTensor* x, DCUTensor* y,
+    DCUTensor* weight, DCUTensor* bias,
+    DCUTensor* running_mean, DCUTensor* running_var,
+    int N, int C, int H, int W,
+    float eps,
+    DCUContext* ctx) {
+
+    miopenTensorDescriptor_t x_desc, y_desc, bn_desc;
+    miopenCreateTensorDescriptor(&x_desc);
+    miopenCreateTensorDescriptor(&y_desc);
+    miopenCreateTensorDescriptor(&bn_desc);
+
+    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
+    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, H, W);
+    miopenDeriveBNTensorDescriptor(bn_desc, x_desc, miopenBNSpatial);
+
+    float alpha = 1.0f, beta = 0.0f;
+
+    miopenBatchNormalizationForwardInference(
+        ctx->get_miopen(),
+        miopenBNSpatial,
+        &alpha, &beta,
+        x_desc, x->data(),
+        y_desc, y->data(),
+        bn_desc,
+        weight->data(),
+        bias->data(),
+        running_mean->data(),
+        running_var->data(),
+        eps
+    );
+
+    miopenDestroyTensorDescriptor(x_desc);
+    miopenDestroyTensorDescriptor(y_desc);
+    miopenDestroyTensorDescriptor(bn_desc);
+}
 } // namespace dcu

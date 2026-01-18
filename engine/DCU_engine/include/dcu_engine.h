@@ -7,25 +7,48 @@
 
 namespace dcu {
 
-// DCU 后端 Engine
-class DCUEngine : public engine::Engine<DCUTensor, DCUContext> {
+class DCUEngine final : public engine::Engine<DCUTensor, DCUContext> {
 public:
     DCUEngine() = default;
+    ~DCUEngine() override = default;
 
-    // 矩阵乘法
-    void matmul(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
-                int M, int N, int K,
-                DCUContext* ctx);
+    // 基础算子
+    void add(DCUTensor*, DCUTensor*, DCUTensor*, int, DCUContext*) override;
+    void matmul(DCUTensor*, DCUTensor*, DCUTensor*, int, int, int, DCUContext*) override;
+    void relu(DCUTensor*, DCUTensor*, int, DCUContext*) override;
+    void transpose(DCUTensor*, DCUTensor*, int, int, DCUContext*) override;
+    void mul_scalar(DCUTensor*, DCUTensor*, float, int, DCUContext*) override;
 
-    // 卷积前向
-    void conv2d_forward(DCUTensor* x, DCUTensor* w, DCUTensor* y,
-                        int N, int C, int H, int W,
-                        int K, int R, int S,
-                        int stride_h, int stride_w,
-                        int pad_h, int pad_w,
-                        int dilation_h, int dilation_w,
-                        int groups,
-                        DCUContext* ctx);
+    // CNN
+    void conv2d(DCUTensor*, DCUTensor*, DCUTensor*,
+                int, int, int, int,
+                int, int, int,
+                int, int,
+                int, int,
+                int, int,
+                int,
+                DCUContext*) override;
+
+    void max_pool2d(DCUTensor*, DCUTensor*,
+                    int, int, int, int,
+                    int, int,
+                    int, int,
+                    int, int,
+                    DCUContext*) override;
+
+    void global_avg_pool(DCUTensor*, DCUTensor*,
+                         int, int, int, int,
+                         DCUContext*) override;
+
+    void flatten(DCUTensor*, DCUTensor*, int, int, DCUContext*) override;
+
+    // 归一化
+    void batch_norm_2d(DCUTensor*, DCUTensor*,
+                       DCUTensor*, DCUTensor*,
+                       DCUTensor*, DCUTensor*,
+                       int, int, int, int,
+                       float,
+                       DCUContext*) override;
 };
 
 } // namespace dcu

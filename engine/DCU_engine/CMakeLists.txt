@@ -31,37 +31,35 @@ file(GLOB_RECURSE ENGINE_SOURCES
 # 创建静态库 dcu_engine
 add_library(dcu_engine STATIC ${ENGINE_SOURCES})
 
-# 链接 DTK 库（使用绝对路径）
-target_link_libraries(dcu_engine
-    PRIVATE
+# 公共 include 路径
+target_include_directories(dcu_engine
+    PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${DTK_ROOT}/include
+)
+
+# 公共 DTK 库链接
+set(DTK_LIBS
     ${DTK_ROOT}/lib/libamdhip64.so
     ${DTK_ROOT}/lib/libMIOpen.so
     ${DTK_ROOT}/lib/librocblas.so
     ${DTK_ROOT}/lib/libhipfft.so
     ${DTK_ROOT}/lib/libhiprand.so
     ${DTK_ROOT}/lib/libhipblas.so
+)
+
+target_link_libraries(dcu_engine
+    PUBLIC
+    ${DTK_LIBS}
 )
 
 # 测试可执行文件
 add_executable(test_engine src/test_engine.cpp)
 
-# 链接静态库和 DTK 库
+# 测试程序链接 dcu_engine（自动继承 include & lib）
 target_link_libraries(test_engine
     PRIVATE
     dcu_engine
-    ${DTK_ROOT}/lib/libamdhip64.so
-    ${DTK_ROOT}/lib/libMIOpen.so
-    ${DTK_ROOT}/lib/librocblas.so
-    ${DTK_ROOT}/lib/libhipfft.so
-    ${DTK_ROOT}/lib/libhiprand.so
-    ${DTK_ROOT}/lib/libhipblas.so
-)
-
-# 编译器 include 路径
-target_include_directories(test_engine
-    PRIVATE
-    include
-    ${DTK_ROOT}/include
 )
 
 # 设置运行时库路径
