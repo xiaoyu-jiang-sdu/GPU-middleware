@@ -24,10 +24,7 @@ class ONNXAwareModel(nn.Module):
 
         # 创建 adapter + executor
         self.adapter = create_adapter(backend)
-        self.executor = IRExecutor(self.ir_graph, self.adapter)
+        self.executor = IRExecutor(self.ir_graph, self.adapter, backend_type=backend)
 
     def forward(self, x):
-        return self.executor.run(
-            inputs={"input": x},
-            parameters=dict(self.model.named_parameters())
-        )
+        return self.executor.run({"input": x})

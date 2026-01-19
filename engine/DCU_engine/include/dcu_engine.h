@@ -14,6 +14,10 @@ public:
 
     // 基础算子
     void add(DCUTensor*, DCUTensor*, DCUTensor*, int, DCUContext*) override;
+    void add_broadcast_nd(DCUTensor*, DCUTensor*, DCUTensor*,
+                          const std::vector<int>&,
+                          const std::vector<int>&,
+                          DCUContext*) override;
     void matmul(DCUTensor*, DCUTensor*, DCUTensor*, int, int, int, DCUContext*) override;
     void relu(DCUTensor*, DCUTensor*, int, DCUContext*) override;
     void transpose(DCUTensor*, DCUTensor*, int, int, DCUContext*) override;

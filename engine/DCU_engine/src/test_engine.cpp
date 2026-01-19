@@ -43,34 +43,45 @@ int main() {
     // -----------------------------
     // 测试 MatMul 算子
     // -----------------------------
-    {int M = 4, K = 3, N = 5;
-    size_t a_size = M*K;
-    size_t b_size = K*N;
-    size_t c_size = M*N;
+    {
+    int M = 4, K = 3, N = 5;
+    size_t a_size = M * K;
+    size_t b_size = K * N;
+    size_t c_size = M * N;
+
+    srand(0);  // 固定随机种子
 
     std::vector<float> host_A(a_size);
     std::vector<float> host_B(b_size);
 
-    for (size_t i = 0; i < a_size; i++) host_A[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-    for (size_t i = 0; i < b_size; i++) host_B[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+    for (size_t i = 0; i < a_size; ++i)
+        host_A[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
 
+    for (size_t i = 0; i < b_size; ++i)
+        host_B[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+
+    // ---------- DCU Tensor ----------
     dcu::DCUTensor A({M, K});
     dcu::DCUTensor B({K, N});
     dcu::DCUTensor C({M, N});
 
-    CHECK_HIP(hipMemcpy(A.data(), host_A.data(), a_size * sizeof(float), hipMemcpyHostToDevice));
-    CHECK_HIP(hipMemcpy(B.data(), host_B.data(), b_size * sizeof(float), hipMemcpyHostToDevice));
+    CHECK_HIP(hipMemcpy(A.data(), host_A.data(),
+                        a_size * sizeof(float),
+                        hipMemcpyHostToDevice));
+    CHECK_HIP(hipMemcpy(B.data(), host_B.data(),
+                        b_size * sizeof(float),
+                        hipMemcpyHostToDevice));
 
     engine.matmul(&A, &B, &C, M, N, K, &ctx);
-
     std::vector<float> host_C(c_size);
-    CHECK_HIP(hipMemcpy(host_C.data(), C.data(), c_size * sizeof(float), hipMemcpyDeviceToHost));
-
-    std::cout << "--- MatMul Output Sample ---" << std::endl;
-    for (int i = 0; i < std::min(10, (int)c_size); i++) {
+    CHECK_HIP(hipMemcpy(host_C.data(), C.data(),
+                        c_size * sizeof(float),
+                        hipMemcpyDeviceToHost));
+    std::cout << "[MatMul] ";
+    for (int i = 0; i < std::min(10, (int)c_size); ++i)
         std::cout << host_C[i] << " ";
+    std::cout << std::endl;
     }
-    std::cout << std::endl;}
 
     // -----------------------------
     // 测试 Relu 算子
@@ -177,7 +188,7 @@ int main() {
     std::vector<float> host_y(y_size);
     CHECK_HIP(hipMemcpy(host_y.data(), d_y.data(), y_size * sizeof(float), hipMemcpyDeviceToHost));
 
-    std::cout << "[MaxPool] ";
+    std::cout << "[Conv2d] ";
     for (int i = 0; i < std::min(10, (int)y_size); i++) {
         std::cout << host_y[i] << " ";
     }

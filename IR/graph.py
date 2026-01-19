@@ -1,7 +1,7 @@
 class IRNode:
     _id_counter = 0
 
-    def __init__(self, op_type, inputs, outputs, attributes=None, group=None):
+    def __init__(self, op_type, inputs, outputs, attributes=None):
         self.id = IRNode._id_counter
         IRNode._id_counter += 1
 
@@ -18,6 +18,7 @@ class IRGraph:
         self.nodes = []  # 节点
         self.inputs = []  # 输入
         self.outputs = []  # 输出
+        self.initializers = {} # 权重
 
     def add_node(self, node: IRNode):
         self.nodes.append(node)

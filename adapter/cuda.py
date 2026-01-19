@@ -49,7 +49,7 @@ class CudaAdapter(BackendAdapter):
     # =========================
     # 张量管理
     # =========================
-    def tensor(self, data):
+    def tensor(self, data, cache=False, cache_key=None):
         if isinstance(data, torch.Tensor):
             return self._to_device(data)
         return torch.tensor(data, device=self.device)

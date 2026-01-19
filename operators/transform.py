@@ -22,3 +22,11 @@ class FlattenOp(BackendOp):
         # 调用 adapter 的 flatten 方法
         y = adapter.flatten(x, axis)
         tensors[self.outputs[0]] = y
+
+
+@register_operator("Transpose")
+class TransposeOp(BackendOp):
+    def run(self, tensors, adapter: BackendAdapter):
+        x = tensors[self.inputs[0]]  # 输入
+        y = adapter.transpose(x)
+        tensors[self.outputs[0]] = y

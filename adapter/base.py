@@ -14,7 +14,7 @@ class BackendAdapter(ABC):
     # 张量管理
     # =========================
     @abstractmethod
-    def tensor(self, data):
+    def tensor(self, data, cache, cache_key):
         # 创建张量
         pass
 

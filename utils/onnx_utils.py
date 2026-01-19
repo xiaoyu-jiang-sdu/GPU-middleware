@@ -2,7 +2,7 @@ import torch
 import onnx
 import tempfile
 from IR.graph import IRGraph, IRNode
-
+from onnx import numpy_helper
 
 def export_onnx(model: torch.nn.Module, input_shape):
     """
@@ -34,6 +34,9 @@ def parse_onnx_model(onnx_model):
 
     ir.inputs = [i.name for i in graph.input]
     ir.outputs = [o.name for o in graph.output]
+
+    for init in graph.initializer:
+        ir.initializers[init.name] = numpy_helper.to_array(init)
 
     for node in graph.node:
         ir.add_node(IRNode(

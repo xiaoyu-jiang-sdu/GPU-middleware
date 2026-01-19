@@ -27,9 +27,11 @@ link_directories(${DTK_ROOT}/lib)
 file(GLOB_RECURSE ENGINE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
+# 查找 pybind11
+find_package(pybind11 REQUIRED)
 
-# 创建静态库 dcu_engine
-add_library(dcu_engine STATIC ${ENGINE_SOURCES})
+# 设置生成共享库用于 Python
+add_library(dcu_engine SHARED ${ENGINE_SOURCES})
 
 # 公共 include 路径
 target_include_directories(dcu_engine
@@ -65,4 +67,24 @@ target_link_libraries(test_engine
 # 设置运行时库路径
 set_target_properties(test_engine PROPERTIES
     BUILD_RPATH "${DTK_ROOT}/lib"
+)
+
+# 添加 bindings.cpp
+set(BINDINGS_SRC bindings.cpp)
+
+# 生成 pybind11 模块
+pybind11_add_module(dcu ${BINDINGS_SRC})
+
+# 设置输出在modules
+set_target_properties(dcu PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/modules
+)
+
+# 链接 DCU Engine 库和 DTK
+target_link_libraries(dcu PRIVATE dcu_engine ${DTK_LIBS})
+
+# 设置 include 路径
+target_include_directories(dcu PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${DTK_ROOT}/include
 )

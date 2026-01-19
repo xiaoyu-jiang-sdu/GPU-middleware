@@ -1,4 +1,5 @@
 #include "dcu_engine.h"
+#include "dcu_common.h"
 #include <miopen/miopen.h>
 #include <rocblas/rocblas.h>
 #include <hip/hip_runtime.h>
@@ -13,16 +14,19 @@ namespace dcu {
 __global__ void add_kernel(float* a, float* b, float* o, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) o[i] = a[i] + b[i];
+    return;
 }
 
 __global__ void relu_kernel(float* x, float* o, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) o[i] = x[i] > 0 ? x[i] : 0;
+    return;
 }
 
 __global__ void mul_scalar_kernel(float* x, float* o, float s, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) o[i] = x[i] * s;
+    return;
 }
 
 __global__ void transpose_kernel(float* x, float* y,
@@ -32,16 +36,28 @@ __global__ void transpose_kernel(float* x, float* y,
     if (r < rows && c < cols) {
         y[c * rows + r] = x[r * cols + c];
     }
+    return;
 }
 
-__global__ void gap_kernel(float* x, float* y, int HW) {
-    int c = blockIdx.x;
-    float sum = 0.0f;
-    for (int i = threadIdx.x; i < HW; i += blockDim.x)
-        sum += x[c * HW + i];
-    atomicAdd(&y[c], sum / HW);
-}
+__global__ void add_broadcast_nd_kernel(
+    const float* a, const float* b, float* out,
+    const int* a_strides, const int* b_strides,
+    const int* b_shape,
+    int ndim, int total)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
 
+    int tmp = idx;
+    int b_idx = 0;
+    for (int d = 0; d < ndim; ++d) {
+        int i = tmp / a_strides[d];
+        tmp = tmp % a_strides[d];
+        int bi = (b_shape[d] == 1) ? 0 : i;
+        b_idx += bi * b_strides[d];
+    }
+    out[idx] = a[idx] + b[b_idx];
+}
 // ------------------------
 // add 实现
 // ------------------------
@@ -50,7 +66,56 @@ void DCUEngine::add(DCUTensor* a, DCUTensor* b, DCUTensor* o, int n, DCUContext*
         dim3((n + 255) / 256), dim3(256), 0, 0,
         (float*)a->data(), (float*)b->data(), (float*)o->data(), n);
 }
+// ------------------------
+// add_broadcast_nd 实现
+// ------------------------
+void DCUEngine::add_broadcast_nd(
+    DCUTensor* a, DCUTensor* b, DCUTensor* out,
+    const std::vector<int>& a_shape,
+    const std::vector<int>& b_shape,
+    DCUContext* ctx)
+{
+    int ndim = a_shape.size();
+    std::vector<int> a_strides(ndim), b_strides(ndim);
 
+    // 计算 strides
+    a_strides[ndim-1] = 1;
+    b_strides[ndim-1] = 1;
+    for (int i = ndim-2; i >= 0; --i) {
+        a_strides[i] = a_strides[i+1] * a_shape[i+1];
+        b_strides[i] = b_strides[i+1] * b_shape[i+1];
+    }
+
+    int total = 1;
+    for (auto d : a_shape) total *= d;
+
+    // 分配 GPU 内存
+    int *d_a_strides = nullptr, *d_b_strides = nullptr, *d_b_shape = nullptr;
+    CHECK_HIP(hipMalloc(&d_a_strides, ndim * sizeof(int)));
+    CHECK_HIP(hipMalloc(&d_b_strides, ndim * sizeof(int)));
+    CHECK_HIP(hipMalloc(&d_b_shape, ndim * sizeof(int)));
+
+    // 拷贝到 GPU
+    CHECK_HIP(hipMemcpy(d_a_strides, a_strides.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
+    CHECK_HIP(hipMemcpy(d_b_strides, b_strides.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
+    CHECK_HIP(hipMemcpy(d_b_shape, b_shape.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
+
+    // launch kernel
+    int block = 256;
+    int grid = (total + block - 1) / block;
+    hipLaunchKernelGGL(add_broadcast_nd_kernel,
+                       dim3(grid), dim3(block), 0, 0,
+                       static_cast<float*>(a->data()),
+                       static_cast<float*>(b->data()),
+                       static_cast<float*>(out->data()),
+                       d_a_strides, d_b_strides, d_b_shape,
+                       ndim, total);
+
+    // 释放 GPU 内存
+    CHECK_HIP(hipFree(d_a_strides));
+    CHECK_HIP(hipFree(d_b_strides));
+    CHECK_HIP(hipFree(d_b_shape));
+}
 // ------------------------
 // matmul 实现
 // ------------------------
@@ -59,15 +124,30 @@ void DCUEngine::matmul(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
                        DCUContext* ctx)
 {
     float alpha = 1.0f, beta = 0.0f;
-    rocblas_sgemm(ctx->get_rocblas(),
-                  rocblas_operation_none,
-                  rocblas_operation_none,
-                  N, M, K,
-                  &alpha,
-                  static_cast<float*>(B->data()), N,
-                  static_cast<float*>(A->data()), K,
-                  &beta,
-                  static_cast<float*>(Out->data()), N);
+
+
+    rocblas_status status = rocblas_sgemm(
+        ctx->get_rocblas(),
+        rocblas_operation_none,
+        rocblas_operation_none,
+        N,
+        M,
+        K,
+        &alpha,
+        static_cast<const float*>(B->data()),
+        N,
+        static_cast<const float*>(A->data()),
+        K,
+        &beta,
+        static_cast<float*>(Out->data()),
+        N
+    );
+    if (status != rocblas_status_success) {
+        std::cerr << "[rocBLAS][sgemm] failed, status = "
+                  << status << std::endl;
+    }
+
+
 }
 // ------------------------
 // Relu 实现
@@ -119,14 +199,10 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
     float* w_data = static_cast<float*>(w->data());
     float* y_data = static_cast<float*>(y->data());
 
-    // 初始化非零数据（测试用）
-    std::srand(static_cast<unsigned>(time(0)));
-    size_t x_size = static_cast<size_t>(N*C*H*W);
-    size_t w_size = static_cast<size_t>(K*C/groups*R*S);
-    size_t y_size = static_cast<size_t>(N*K*H*W);
-    for (size_t i = 0; i < x_size; ++i) x_data[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-    for (size_t i = 0; i < w_size; ++i) w_data[i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-    for (size_t i = 0; i < y_size; ++i) y_data[i] = 0.0f;
+    int Ho = (H + 2 * pad_h - dilation_h * (R - 1) - 1) / stride_h + 1;
+    int Wo = (W + 2 * pad_w - dilation_w * (S - 1) - 1) / stride_w + 1;
+
+    CHECK_HIP(hipMemset(y_data, 0, sizeof(float) * N * K * Ho * Wo));
 
     // Tensor 描述符
     miopenTensorDescriptor_t x_desc, w_desc, y_desc;
@@ -136,7 +212,7 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
 
     miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
     miopenSet4dTensorDescriptor(w_desc, miopenFloat, K, C/groups, R, S);
-    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, K, H, W);
+    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, K, Ho, Wo);
 
     // 卷积描述符
     miopenConvolutionDescriptor_t conv_desc;
@@ -151,14 +227,10 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
     // 工作空间
     size_t workspace_size = 0;
     miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
-                                             w_desc, x_desc, conv_desc, y_desc, &workspace_size);
+                                             x_desc, w_desc, conv_desc, y_desc, &workspace_size);
     void* workspace = nullptr;
     if (workspace_size > 0) {
-        hipError_t e = hipMalloc(&workspace, workspace_size);
-        if (e != hipSuccess) {
-            std::cerr << "hipMalloc failed for workspace" << std::endl;
-            workspace = nullptr;
-        }
+        CHECK_HIP(hipMalloc(&workspace, workspace_size));
     }
 
     // 搜索最优算法
@@ -185,7 +257,7 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                              y_desc, y_data,
                              workspace, workspace_size);
 
-    if (workspace) hipFree(workspace);
+    if (workspace) CHECK_HIP(hipFree(workspace));
 
     // 清理描述符
     miopenDestroyTensorDescriptor(x_desc);
@@ -241,25 +313,59 @@ void DCUEngine::max_pool2d(DCUTensor* x, DCUTensor* y,
 }
 
 // ------------------------
-// flatten 实现
+// global avg pool 实现
 // ------------------------
 void DCUEngine::global_avg_pool(
     DCUTensor* x, DCUTensor* y,
     int N, int C, int H, int W,
-    DCUContext*)
+    DCUContext* ctx)
 {
-    int HW = H * W;
-    hipMemset(y->data(), 0, sizeof(float) * N * C);
+    // 1. 创建 tensor 描述符
+    miopenTensorDescriptor_t x_desc, y_desc;
+    miopenCreateTensorDescriptor(&x_desc);
+    miopenCreateTensorDescriptor(&y_desc);
 
-    dim3 grid(N * C);
-    dim3 block(256);
+    // 输入: NCHW
+    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
 
-    hipLaunchKernelGGL(gap_kernel,
-        grid, block, 0, 0,
-        static_cast<float*>(x->data()),
-        static_cast<float*>(y->data()),
-        HW);
+    // 输出: N x C x 1 x 1
+    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, 1, 1);
+
+    // 2. 创建池化描述符
+    miopenPoolingDescriptor_t pool_desc;
+    miopenCreatePoolingDescriptor(&pool_desc);
+
+    // 全局平均池化: kernel size = H x W, stride=1, padding=0
+    miopenSet2dPoolingDescriptor(
+        pool_desc,
+        miopenPoolingAverage,
+        H, W,      // kernel
+        0, 0,      // padding
+        1, 1      // stride
+    );
+
+    float alpha = 1.0f;
+    float beta = 0.0f;
+
+    // 3. 调用 MIOpen 池化前向
+    miopenPoolingForward(
+        ctx->get_miopen(),
+        pool_desc,
+        &alpha,
+        x_desc, x->data(),
+        &beta,
+        y_desc, y->data(),
+        false,     // do_backward = false
+        nullptr,   // workspace
+        0          // workspace size
+    );
+
+    // 4. 清理描述符
+    miopenDestroyPoolingDescriptor(pool_desc);
+    miopenDestroyTensorDescriptor(x_desc);
+    miopenDestroyTensorDescriptor(y_desc);
 }
+
 
 
 // ------------------------
@@ -267,9 +373,9 @@ void DCUEngine::global_avg_pool(
 // ------------------------
 void DCUEngine::flatten(DCUTensor* x, DCUTensor* y,
                         int outer, int inner, DCUContext*) {
-    hipMemcpy(y->data(), x->data(),
-              sizeof(float) * outer * inner,
-              hipMemcpyDeviceToDevice);
+    CHECK_HIP(hipMemcpy(y->data(), x->data(),
+                sizeof(float) * outer * inner,
+                hipMemcpyDeviceToDevice));
 }
 
 // ------------------------

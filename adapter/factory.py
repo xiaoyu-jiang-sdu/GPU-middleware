@@ -19,8 +19,14 @@ def register_adapter(name: str):
 
 
 def create_adapter(name: str, **kwargs) -> BackendAdapter:
-    # 根据name生成适配器实例
-    cls = ADAPTER_REGISTRY.get(name.lower())
-    if cls is None:
-        raise ValueError(f"Adapter for '{name}' not found")
+    name = name.lower()
+
+    if name not in ADAPTER_REGISTRY:
+        available = ", ".join(ADAPTER_REGISTRY.keys())
+        raise RuntimeError(
+            f"Adapter '{name}' is not available.\n"
+            f"Available adapters: [{available}]"
+        )
+
+    cls = ADAPTER_REGISTRY[name]
     return cls(**kwargs)

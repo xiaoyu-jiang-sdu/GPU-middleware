@@ -12,6 +12,11 @@ public:
 
     // 基础算子
     virtual void add(T* a, T* b, T* out, int n, Ctx* ctx) = 0;
+    virtual void add_broadcast_nd(T* a, T* b, T* out,
+                                const std::vector<int>& a_shape,
+                                const std::vector<int>& b_shape,
+                                Ctx* ctx) = 0;
+
     virtual void matmul(T* A, T* B, T* Out, int M, int N, int K, Ctx* ctx) = 0;
     virtual void relu(T* x, T* out, int n, Ctx* ctx) = 0;
     virtual void transpose(T* x, T* y, int rows, int cols, Ctx* ctx) = 0;

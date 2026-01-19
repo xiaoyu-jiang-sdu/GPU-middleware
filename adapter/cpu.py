@@ -13,7 +13,7 @@ class CpuAdapter(BackendAdapter):
     # =========================
     # 张量管理
     # =========================
-    def tensor(self, data):
+    def tensor(self, data, cache=False, cache_key=None):
         # 把输入数据转换为 numpy.ndarray
         if hasattr(data, 'detach'):  # torch.Tensor
             return data.detach().cpu().numpy().astype(np.float32)
