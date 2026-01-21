@@ -37,10 +37,10 @@ class InferenceThread(QThread):
 
     def run(self):
         start_time = time.time()
-        self.log_signal.emit(f"⚡ 开始在 {self.backend} 执行推理...")
+        self.log_signal.emit(f"开始在 {self.backend} 执行推理...")
         out = torch.tensor(self.model(self.input_tensor))  # 确保输出是Tensor
         elapsed_ms = (time.time() - start_time) * 1000
-        self.log_signal.emit(f"✅ 推理完成，用时 {elapsed_ms:.2f} ms")
+        self.log_signal.emit(f"推理完成，用时 {elapsed_ms:.2f} ms")
         self.done_signal.emit(out, elapsed_ms)
 
 # ==========================
@@ -122,7 +122,7 @@ class PrototypeGUI(QWidget):
     # -------------------
     def load_input(self):
         self.input_tensor = torch.randn(1, 3, 224, 224)
-        self.output_text.append("✔ 已生成随机输入 Tensor")
+        self.output_text.append("已生成随机输入 Tensor")
 
     # -------------------
     # 推理执行（异步）
@@ -163,7 +163,7 @@ class PrototypeGUI(QWidget):
     def show_inference_result(self, out, elapsed_ms):
         self.output_text.append(f"输出 shape: {tuple(out.shape)}")
         self.output_text.append(f"输出 Tensor:\n{out}")
-        self.perf_text.setText(f"⏱ 推理时间: {elapsed_ms:.2f} ms\n执行后端: {self.current_backend}")
+        self.perf_text.setText(f"推理时间: {elapsed_ms:.2f} ms\n执行后端: {self.current_backend}")
 
     # -------------------
     # 视图切换
@@ -283,7 +283,7 @@ class PrototypeGUI(QWidget):
             arrowsize=12
         )
 
-        self.ax.set_title("IR Graph 前10非Identity节点展示")
+        self.ax.set_title("IR Graph 前10节点展示")
         self.ax.axis("off")
         self.canvas.draw_idle()
 

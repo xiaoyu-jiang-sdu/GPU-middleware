@@ -27,4 +27,5 @@ class ONNXAwareModel(nn.Module):
         self.executor = IRExecutor(self.ir_graph, self.adapter, backend_type=backend)
 
     def forward(self, x):
-        return self.executor.run({"input": x})
+        # 默认拷贝回cpu用于展示
+        return self.adapter.to_numpy(self.executor.run({"input": x}))

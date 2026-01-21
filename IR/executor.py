@@ -22,9 +22,4 @@ class IRExecutor:
 
         for op in self.ops:
             op.run(self.tensors, self.adapter)
-            for name, t in self.tensors.items():
-                if hasattr(self.adapter, "to_numpy"):
-                    arr = self.adapter.to_numpy(t)
-                    print(f"[{self.backend_type}] after {name}: shape={arr.shape}, mean={arr.mean():.6f}, std={arr.std():.6f}")
-
         return self.tensors[self.graph.outputs[0]]
