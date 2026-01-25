@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 
 
 class TraceGanttWidget(QGroupBox):
-    def __init__(self, parent=None):
+    def __init__(self):
         super().__init__("推理时间线")   # ← 标题
 
         self.figure = Figure(figsize=(10, 5))
@@ -16,6 +16,10 @@ class TraceGanttWidget(QGroupBox):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.canvas)
+
+        self._bars = []
+        self._annot = None
+        self.canvas.mpl_connect("motion_notify_event", self._on_hover)
 
     def load_trace(self, trace_path: Path, model="", backend=""):
         if not trace_path.exists():
@@ -28,6 +32,7 @@ class TraceGanttWidget(QGroupBox):
         self._render(events, model, backend)
 
     def _render(self, events, model="", backend=""):
+        self._bars.clear()
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
@@ -55,7 +60,7 @@ class TraceGanttWidget(QGroupBox):
             for e in evs:
                 start = (e["ts"] - t0) / 1000.0
                 dur = e["dur"] / 1000.0
-                ax.barh(
+                bars = ax.barh(
                     y,
                     dur,
                     left=start,
@@ -63,6 +68,9 @@ class TraceGanttWidget(QGroupBox):
                     color=self._color_for(lane_name),
                     alpha=0.8
                 )
+
+                rect = bars[0]
+                self._bars.append((rect, e))
 
             yticks.append(y)
             ylabels.append(lane_name)
@@ -79,8 +87,18 @@ class TraceGanttWidget(QGroupBox):
 
         ax.grid(True, axis="x", linestyle="--", alpha=0.3)
 
-        # 给 y 轴标签留空间
         self.figure.subplots_adjust(left=0.25)
+
+        if self._annot is None:
+            self._annot = ax.annotate(
+                "",
+                xy=(0, 0),
+                xytext=(10, 10),
+                textcoords="offset points",
+                bbox=dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9),
+                arrowprops=dict(arrowstyle="->"),
+            )
+            self._annot.set_visible(False)
 
         self.canvas.draw_idle()
 
@@ -92,3 +110,37 @@ class TraceGanttWidget(QGroupBox):
             "#2DD4BF", "#F97316"
         ]
         return palette[hash(name) % len(palette)]
+
+    def _on_hover(self, event):
+        if event.inaxes is None:
+            if self._annot:
+                self._annot.set_visible(False)
+                self.canvas.draw_idle()
+            return
+
+        for rect, e in self._bars:
+            contains, _ = rect.contains(event)
+            if not contains:
+                continue
+
+            # 命中 bar
+            start = e["ts"] / 1000.0
+            dur = e["dur"] / 1000.0
+            name = e.get("name", "")
+            op = e.get("args", {}).get("op", "")
+
+            text = (
+                f"{op or name}\n"
+                f"Duration: {dur:.3f} ms"
+            )
+
+            self._annot.xy = (event.xdata, event.ydata)
+            self._annot.set_text(text)
+            self._annot.set_visible(True)
+            self.canvas.draw_idle()
+            return
+
+        # 没命中任何 bar
+        if self._annot.get_visible():
+            self._annot.set_visible(False)
+            self.canvas.draw_idle()

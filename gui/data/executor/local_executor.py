@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import threading
@@ -6,7 +5,7 @@ from typing import Tuple
 
 from gui.data.driver.device_config import RuntimeConfig
 from gui.data.executor.base import Executor
-from utils.trace import TRACE_PREFIX, recorder, parse_trace_line
+from utils.trace import parse_trace_line
 
 
 class LocalExecutor(Executor):
@@ -32,6 +31,7 @@ class LocalExecutor(Executor):
                 else:
                     run_env[k] = value
 
+            print(f"[LOCAL] Executing {cmd}")
             process = subprocess.Popen(
                 cmd,
                 shell=True,

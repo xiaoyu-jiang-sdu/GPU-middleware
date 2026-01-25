@@ -9,6 +9,8 @@ class RuntimeConfig:
     shell: str
     source: List[str]
     env: Dict[str, List[str]]
+    py_path: str
+    cwd: str
 
 
 @dataclass

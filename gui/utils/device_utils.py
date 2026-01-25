@@ -61,7 +61,9 @@ def load_devices(device_cfgs_path=None, ssh_cfgs_path=None):
         runtime_cfg = RuntimeConfig(
             shell=runtime_shell,
             source=runtime.get("source", []),
-            env=runtime_env
+            env=runtime_env,
+            py_path=runtime.get("py_path", "python"),
+            cwd=runtime.get("cwd", "")
         )
 
         # ssh 及 executor

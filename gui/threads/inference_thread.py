@@ -1,5 +1,7 @@
 import time
 from PyQt5.QtCore import QThread, pyqtSignal
+
+from gui.data.driver.device import Device
 from utils.trace import recorder
 
 
@@ -7,7 +9,7 @@ class InferenceThread(QThread):
     log_signal = pyqtSignal(str)
     done_signal = pyqtSignal(object, float)
 
-    def __init__(self, model, device):
+    def __init__(self, model: str, device: Device):
         super().__init__()
         self.model = model
         self.device = device
@@ -18,13 +20,8 @@ class InferenceThread(QThread):
         try:
             with self.device as d:
                 device_type = d.cfg.type.value
-                cmd = (
-                        (r".venv\Scripts\python.exe eval.py" if device_type != "dcu" else "python eval.py")
-                        + f" --device={device_type} --model={self.model}"
-                )
-                out, err, code = d.run(cmd,
-                                       cwd=r"D:\PythonProject\GPU-middleware" if device_type != "dcu"
-                                       else "./GPU-middleware")
+                cmd = d.cfg.runtime.py_path + " eval.py" + f" --device={device_type} --model={self.model}"
+                out, err, code = d.run(cmd, cwd=d.cfg.runtime.cwd)
 
                 # 转为字符串
                 if isinstance(out, bytes):
