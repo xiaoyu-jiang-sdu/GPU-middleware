@@ -1,11 +1,13 @@
+from pathlib import Path
+
 import yaml
 
 from gui.data.driver.ssh_config import SSHConfig
 from gui.data.enum.ssh_type import SSHType
 
 
-def load_ssh_configs(path="./config/ssh_config.yaml"):
-    with open(path, "r") as f:
+def load_ssh_configs(path: Path):
+    with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     ssh_map = {}

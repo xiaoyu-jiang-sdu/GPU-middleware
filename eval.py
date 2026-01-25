@@ -1,19 +1,26 @@
 import torch
-from torchvision.models import resnet18
-from model.model import ONNXAwareModel
+
+from models.registry import build_model
+from wrapper.wrapper import ONNXModelWrapper
 import numpy as np
 import argparse
+from utils.trace import trace_block_emit
+
+import os
+os.environ["TORCH_HOME"] = "E:/torch_cache"
 
 
 # 模型评估参数
 def parse_args():
     parser = argparse.ArgumentParser(description="ONNXAwareModel evaluation")
-
+    parser.add_argument("--model", type=str, default="resnet18",
+                        choices=["resnet18", "resnet50", "vit_b_16"], help="model architecture")
+    parser.add_argument("--num_classes", type=int, default=10, help="model output classes")
     parser.add_argument("--device", type=str, default="cuda", help="choose device to eval model")
     parser.add_argument("--seed", type=int, default=2026, help="random seed for np and torch")
-    args = parser.parse_args()
+    model_args = parser.parse_args()
 
-    return args
+    return model_args
 
 
 def set_configs(seed=2026):
@@ -26,18 +33,22 @@ if __name__ == "__main__":
     args = parse_args()
     set_configs(args.seed)
     # 原始模型
-    base_model = resnet18(num_classes=10)
-
+    with trace_block_emit("Creating nn model", model=args.model):
+        base_model, input_shape = build_model(
+            model_name=args.model,
+            num_classes=args.num_classes,
+        )
     # 包装
-    model = ONNXAwareModel(
-        base_model,
-        input_shape=(1, 3, 224, 224),
-        backend=args.device
-    )
-    # 随机数据
+    with trace_block_emit("Creating wrapper", model=args.model, backend=args.device):
+        model = ONNXModelWrapper(
+            base_model,
+            input_shape,
+            backend=args.device
+        )
     x = torch.randn(1, 3, 224, 224)
 
-    out = model(x)
+    with trace_block_emit("Total evaluation", model=args.model, backend=args.device):
+        out = model(x)
     print("eval finish! out info:")
     print(out)
     print("shape:", out.shape)

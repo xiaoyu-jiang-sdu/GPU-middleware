@@ -1,0 +1,24 @@
+/* 左侧菜单容器 */
+#SideBar {
+    background-color: #2E3B4E;
+}
+
+/* 侧边栏按钮 */
+QPushButton#SideBarButton {
+    background-color: transparent;
+    color: white;
+    text-align: left;
+    padding-left: 20px;
+    border: none;
+    font-size: 14px;
+    border-radius: 0px;
+}
+
+QPushButton#SideBarButton:hover {
+    background-color: rgba(255,255,255,0.15);
+}
+
+QPushButton#SideBarButton:checked {
+    background-color: rgba(255,255,255,0.25);
+    font-weight: bold;
+}

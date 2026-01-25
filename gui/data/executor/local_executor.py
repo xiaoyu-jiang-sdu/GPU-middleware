@@ -1,9 +1,12 @@
+import json
 import os
 import subprocess
+import threading
 from typing import Tuple
 
 from gui.data.driver.device_config import RuntimeConfig
 from gui.data.executor.base import Executor
+from utils.trace import TRACE_PREFIX, recorder, parse_trace_line
 
 
 class LocalExecutor(Executor):
@@ -29,19 +32,51 @@ class LocalExecutor(Executor):
                 else:
                     run_env[k] = value
 
-            print(f"[LOCAL] Executing: {cmd}")
-            result = subprocess.run(
+            process = subprocess.Popen(
                 cmd,
                 shell=True,
                 cwd=cwd,
+                env=run_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=run_env
+                bufsize=1
             )
 
-            print(f"[LOCAL] return_code: {result.returncode}")
-            return result.stdout, result.stderr, result.returncode
+            stdout_buf = []
+            stderr_buf = []
+
+            def _read_stream(stream, buf):
+                if stream is None:
+                    return
+                try:
+                    for line in iter(stream.readline, ""):
+                        if parse_trace_line(line):
+                            continue
+                        buf.append(line)
+                finally:
+                    stream.close()
+            t_out = threading.Thread(
+                target=_read_stream,
+                args=(process.stdout, stdout_buf),
+                daemon=True
+            )
+            t_err = threading.Thread(
+                target=_read_stream,
+                args=(process.stderr, stderr_buf),
+                daemon=True
+            )
+
+            t_out.start()
+            t_err.start()
+
+            return_code = process.wait()
+            t_out.join()
+            t_err.join()
+
+            print(f"[LOCAL] return_code={return_code}")
+
+            return "".join(stdout_buf), "".join(stderr_buf), return_code
         except subprocess.TimeoutExpired:
             # 超时
             print(f"[LOCAL] Command timed out: {cmd}")

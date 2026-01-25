@@ -1,0 +1,77 @@
+/* 顶部控制栏 */
+#ControlBar {
+    background-color: white;
+    border-radius: 12px;
+    border: 1px solid #E0E3E8;
+}
+
+/* 左侧标签 */
+QLabel#ControlLabel {
+    font-size: 17px;
+    font-weight: 600;
+    color: #1F2937;
+    padding-right: 10px;
+}
+
+/* 下拉框 */
+QComboBox#ControlCombo {
+    min-width: 140px;
+    min-height: 36px;
+    padding: 0 30px 0 12px;
+    font-size: 15px;
+    color: #111827;
+    border: 1px solid #D1D5DB;
+    border-radius: 8px;
+    background-color: #F9FAFB;
+}
+
+/* hover / focus 状态 */
+QComboBox#ControlCombo:hover {
+    border-color: #60A5FA;
+}
+QComboBox#ControlCombo:focus {
+    border-color: #2563EB;
+    background-color: white;
+}
+
+/* 弹出列表整体 */
+QComboBox#ControlCombo QAbstractItemView {
+    font-size: 15px;
+    color: #111827;
+    background-color: #F9FAFB;
+    selection-background-color: #2563EB;
+    selection-color: white;
+    border: 1px solid #D1D5DB;
+    border-radius: 8px;
+    padding: 4px 0;
+}
+
+QComboBox#ControlCombo QAbstractItemView::item {
+    padding: 6px 12px;
+    min-height: 28px;
+}
+
+/* 下拉按钮区域 */
+QComboBox#ControlCombo::drop-down {
+    width: 28px;
+    background: transparent;
+    border: none;
+}
+
+/* 运行按钮 */
+QPushButton#RunButton {
+    background-color: #2563EB;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 8px 16px;
+}
+
+QPushButton#RunButton:hover {
+    background-color: #1D4ED8;
+}
+
+QPushButton#RunButton:pressed {
+    background-color: #1E40AF;
+}

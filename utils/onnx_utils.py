@@ -3,7 +3,10 @@ import onnx
 import tempfile
 from IR.graph import IRGraph, IRNode
 from onnx import numpy_helper
+from utils.trace import trace
 
+
+@trace("Exporting onnx IR (nn.Module -> onnx IR)")
 def export_onnx(model: torch.nn.Module, input_shape):
     """
     将 torch.Module 导出为 ONNX，并返回 onnx.ModelProto
@@ -19,15 +22,15 @@ def export_onnx(model: torch.nn.Module, input_shape):
         model,
         dummy_input,
         onnx_path,
-        opset_version=13,
+        opset_version=14,
         do_constant_folding=False,
         input_names=["input"],
         output_names=["output"],
     )
-
     return onnx.load(onnx_path)
 
 
+@trace("Parsing backend IR (onnx IR -> backend IR)")
 def parse_onnx_model(onnx_model):
     graph = onnx_model.graph
     ir = IRGraph()

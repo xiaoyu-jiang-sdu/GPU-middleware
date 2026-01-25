@@ -1,0 +1,831 @@
+{
+  "traceEvents": [
+    {
+      "name": "Creating nn model",
+      "ph": "X",
+      "ts": 1014604452220.1849,
+      "dur": 327392.97497558594,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "model": "resnet18"
+      }
+    },
+    {
+      "name": "Creating wrapper",
+      "ph": "X",
+      "ts": 1014604779739.908,
+      "dur": 3895765.3459472656,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "model": "resnet18",
+        "backend": "dcu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608677301.075,
+      "dur": 11.3399658203125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Identity"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608677344.525,
+      "dur": 2.639892578125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Identity"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608677373.855,
+      "dur": 1.9490966796875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Identity"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608677393.334,
+      "dur": 318241.2199707031,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608995772.123,
+      "dur": 363.35595703125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014608996170.8191,
+      "dur": 6792.179931640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609002998.188,
+      "dur": 169.3580322265625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "MaxPool"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609003198.286,
+      "dur": 2293.156982421875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609005525.772,
+      "dur": 87.6390380859375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609005640.3209,
+      "dur": 150.3980712890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609005818.099,
+      "dur": 2089.6390380859375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609007938.597,
+      "dur": 136.908935546875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609008102.846,
+      "dur": 126.998046875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609008266.724,
+      "dur": 120.2889404296875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609008413.542,
+      "dur": 2093.819091796875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609010537.5,
+      "dur": 117.39892578125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609010681.399,
+      "dur": 95.9488525390625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609010800.698,
+      "dur": 2167.85693359375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609013000.365,
+      "dur": 65.97900390625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609013088.704,
+      "dur": 139.8089599609375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609013253.882,
+      "dur": 59.39013671875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609013335.8711,
+      "dur": 2139.14892578125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609015506.329,
+      "dur": 83.0389404296875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609015614.258,
+      "dur": 92.0689697265625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609015728.977,
+      "dur": 2140.327880859375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609017900.924,
+      "dur": 82.198974609375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609018005.5431,
+      "dur": 2184.2479248046875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609020221.7999,
+      "dur": 68.9600830078125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609020313.619,
+      "dur": 142.18896484375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609020481.458,
+      "dur": 66.7890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609020570.1171,
+      "dur": 2075.867919921875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609022676.085,
+      "dur": 82.7091064453125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609022781.274,
+      "dur": 95.6090087890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609022899.393,
+      "dur": 2141.3880615234375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609025072.41,
+      "dur": 79.718994140625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609025175.1489,
+      "dur": 92.549072265625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609025290.708,
+      "dur": 55.9189453125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609025367.377,
+      "dur": 2134.758056640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609027533.465,
+      "dur": 84.26904296875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609027642.484,
+      "dur": 91.1090087890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609027755.582,
+      "dur": 2183.367919921875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609029970.88,
+      "dur": 88.0589599609375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609030081.358,
+      "dur": 2151.91796875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609032264.166,
+      "dur": 68.3389892578125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609032354.895,
+      "dur": 90.7789306640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609032468.4141,
+      "dur": 54.138916015625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609032543.773,
+      "dur": 2067.3790283203125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609034641.571,
+      "dur": 93.8690185546875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609034757.5701,
+      "dur": 89.0389404296875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609034869.1489,
+      "dur": 2087.3179931640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609036986.657,
+      "dur": 131.4290771484375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609037144.355,
+      "dur": 93.4691162109375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609037260.3839,
+      "dur": 55.340087890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609037337.473,
+      "dur": 2092.60888671875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609039461.2421,
+      "dur": 88.7489013671875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609039574.3611,
+      "dur": 89.39892578125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609039686.2891,
+      "dur": 2123.827880859375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609041841.317,
+      "dur": 89.1090087890625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609041953.176,
+      "dur": 2165.6968994140625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609044149.803,
+      "dur": 62.22900390625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609044234.072,
+      "dur": 89.8990478515625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609044345.771,
+      "dur": 54.2789306640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609044421.14,
+      "dur": 2078.8690185546875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609046530.139,
+      "dur": 90.5089111328125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609046642.2871,
+      "dur": 88.679931640625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609046753.146,
+      "dur": 2095.2989501953125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Conv"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609048879.0441,
+      "dur": 90.298828125,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "BatchNormalization"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609048991.383,
+      "dur": 91.4588623046875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Add"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609049105.082,
+      "dur": 54.888916015625,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Relu"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609049181.741,
+      "dur": 82.529052734375,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "GlobalAveragePool"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609049289.37,
+      "dur": 129.989013671875,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Flatten"
+      }
+    },
+    {
+      "name": "Executing ops:",
+      "ph": "X",
+      "ts": 1014609049445.358,
+      "dur": 93819.60095214844,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "op": "Gemm"
+      }
+    },
+    {
+      "name": "Total evaluation",
+      "ph": "X",
+      "ts": 1014608677209.246,
+      "dur": 466305.1300048828,
+      "pid": 1,
+      "tid": 7872,
+      "args": {
+        "model": "resnet18",
+        "backend": "dcu"
+      }
+    }
+  ]
+}

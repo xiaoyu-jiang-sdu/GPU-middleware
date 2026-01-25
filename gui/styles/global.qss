@@ -1,0 +1,26 @@
+QMainWindow {
+    background-color: #F5F7FA;
+}
+
+QPushButton {
+    background-color: #3C4A63;
+    color: white;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+    border: none;
+}
+
+QPushButton:hover {
+    background-color: #5A6B8C;
+}
+
+QPushButton:pressed {
+    background-color: #1F2A3A;
+}
+
+/* 页面容器 */
+QStackedWidget {
+    background-color: white;
+    border-radius: 10px;
+}

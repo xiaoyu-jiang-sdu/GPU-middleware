@@ -1,10 +1,14 @@
+import json
 from typing import Optional, Tuple
 import paramiko
+import threading
 
 from gui.data.driver.device_config import RuntimeConfig
 from gui.data.driver.ssh_config import SSHConfig
 from gui.data.executor.base import Executor
 from gui.utils.cmd_utils import build_full_command
+
+from utils.trace import TRACE_PREFIX, recorder
 
 
 class SSHExecutor(Executor):
@@ -59,17 +63,56 @@ class SSHExecutor(Executor):
         full_cmd = f'{shell} -lc "{inner_cmd}"'
         try:
             # 执行命令
-            stdin, stdout, stderr = self.client.exec_command(full_cmd)
+            stdin, stdout, stderr = self.client.exec_command(full_cmd, get_pty=True)
 
-            # 输出
-            stdout_data = stdout.read().decode()
-            stderr_data = stderr.read().decode()
+            stdout_buf = []
+            stderr_buf = []
 
-            # 返回码
+            def _handle_trace_line(line: str) -> bool:
+                if not line.startswith(TRACE_PREFIX):
+                    return False
+                try:
+                    payload = line[len(TRACE_PREFIX):].strip()
+                    event = json.loads(payload)
+                    recorder.events.append(event)
+                    return True
+                except Exception:
+                    return False
+
+            def _read_stream(stream, buf):
+                if stream is None:
+                    return
+                try:
+                    for line in iter(stream.readline, ""):
+                        if _handle_trace_line(line):
+                            continue
+                        buf.append(line)
+                finally:
+                    stream.close()
+            t_out = threading.Thread(
+                target=_read_stream,
+                args=(stdout, stdout_buf),
+                daemon=True
+            )
+            t_err = threading.Thread(
+                target=_read_stream,
+                args=(stderr, stderr_buf),
+                daemon=True
+            )
+
+            t_out.start()
+            t_err.start()
+
             return_code = stdout.channel.recv_exit_status()
-            print(f"[SSH: {self.cfg.hostname}:{self.cfg.port}] return_code: {return_code}")
+            t_out.join()
+            t_err.join()
 
-            return stdout_data, stderr_data, return_code
+            stdout_str = "".join(stdout_buf)
+            stderr_str = "".join(stderr_buf)
+
+            print(f"[SSH {self.cfg.hostname}] return_code={return_code}")
+
+            return stdout_str, stderr_str, return_code
 
         except paramiko.SSHException as e:
             print(f"[SSH: {self.cfg.hostname}:{self.cfg.port}] SSH error executing command: {e}")

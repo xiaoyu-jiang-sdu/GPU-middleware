@@ -1,6 +1,8 @@
 from typing import Dict, List
 import yaml
+from pathlib import Path
 
+from config.project_config import ProjectConfig
 from gui.data.driver.device import Device
 from gui.data.driver.device_config import RuntimeConfig, DeviceConfig
 from gui.data.enum.device_type import DeviceType
@@ -37,8 +39,13 @@ def parse_env_config(env_config: Dict) -> Dict[str, List[str]]:
 """
 
 
-def load_devices(device_cfgs_path, ssh_cfgs_path):
-    with open(device_cfgs_path, "r") as f:
+def load_devices(device_cfgs_path=None, ssh_cfgs_path=None):
+
+    base_path = ProjectConfig.gui_dir() / "config"  # gui/config
+    device_cfgs_path = Path(device_cfgs_path or (base_path / "device_config.yaml"))
+    ssh_cfgs_path = Path(ssh_cfgs_path or (base_path / "ssh_config.yaml"))
+
+    with device_cfgs_path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     ssh_map = load_ssh_configs(ssh_cfgs_path)
