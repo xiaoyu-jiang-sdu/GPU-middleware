@@ -6,7 +6,7 @@ from models.registry import MODEL_REGISTRY
 
 
 class ControlBarWidget(QGroupBox):
-    run_clicked = pyqtSignal(str, str)
+    run_clicked = pyqtSignal(str, str, str)
 
     def __init__(self):
         super().__init__()
@@ -26,6 +26,11 @@ class ControlBarWidget(QGroupBox):
         self.model_combo.setObjectName("ControlCombo")
         self._load_models()
 
+        self.batch_size_combo = QComboBox()
+        self.batch_size_combo.setFont(QFont("Microsoft YaHei", 16))
+        self.batch_size_combo.setObjectName("ControlCombo")
+        self.batch_size_combo.addItems(["8", "16", "32", "64"])
+
         # 推理按钮
         self.run_btn = QPushButton("▶ 运行推理")
         self.run_btn.setObjectName("RunButton")
@@ -40,6 +45,9 @@ class ControlBarWidget(QGroupBox):
         model_label.setObjectName("ControlLabel")
         model_label.setFont(QFont("Microsoft YaHei", 16))
 
+        batch_size_label = QLabel("批大小")
+        batch_size_label.setObjectName("ControlLabel")
+        batch_size_label.setFont(QFont("Microsoft YaHei", 16))
         # 布局
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 8, 16, 8)
@@ -50,6 +58,9 @@ class ControlBarWidget(QGroupBox):
         layout.addSpacing(20)
         layout.addWidget(model_label)
         layout.addWidget(self.model_combo)
+        layout.addSpacing(20)
+        layout.addWidget(batch_size_label)
+        layout.addWidget(self.batch_size_combo)
         layout.addStretch()
         layout.addWidget(self.run_btn)
 
@@ -64,5 +75,6 @@ class ControlBarWidget(QGroupBox):
     def _emit_run(self):
         self.run_clicked.emit(
             self.backend_combo.currentText(),
-            self.model_combo.currentText()
+            self.model_combo.currentText(),
+            self.batch_size_combo.currentText()
         )

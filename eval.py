@@ -1,5 +1,6 @@
 import torch
 
+from config.project_config import ProjectConfig
 from models.registry import build_model
 from wrapper.wrapper import ONNXModelWrapper
 import numpy as np
@@ -49,7 +50,18 @@ if __name__ == "__main__":
 
     with trace_block_emit("Total evaluation", model=args.model, backend=args.device):
         out = model(x)
+
+    performance_dir = ProjectConfig.gui_dir() / "performance"
+    performance_dir.mkdir(parents=True, exist_ok=True)
+
+    model_dir = performance_dir / args.model
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    batch_dir = model_dir / f"batch_size_{args.batch_size}"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+
     print("eval finish! out info:")
-    np.save(f"{args.model}_evaluation_on_{args.device}", out)
     print("shape:", out.shape)
     print("mean:", out.mean(), "max:", out.max(), "min:", out.min())
+    save_path = batch_dir / f"{args.device}.npy"
+    np.save(save_path, out)

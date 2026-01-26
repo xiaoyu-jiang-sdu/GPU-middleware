@@ -1,0 +1,142 @@
+{
+  "resnet18": [
+    {
+      "batch_size": 8,
+      "backend": {
+        "cuda": {
+          "eval_time": 191.465,
+          "wrap_time": 487.990
+        },
+        "cpu": {
+          "eval_time": 309.701,
+          "wrap_time": 403.354
+        },
+        "dcu": {
+          "eval_time": 485.570,
+          "wrap_time": 4001.442
+        }
+      }
+    },
+    {
+      "batch_size": 16,
+      "backend": {
+        "cuda": {
+          "eval_time": 202.003,
+          "wrap_time": 485.623
+        },
+        "cpu": {
+          "eval_time": 626.909,
+          "wrap_time": 378.086
+        },
+        "dcu": {
+          "eval_time": 493.547,
+          "wrap_time": 3939.775
+        }
+      }
+    },
+    {
+      "batch_size": 32,
+      "backend": {
+        "cuda": {
+          "eval_time": 222.330,
+          "wrap_time": 480.097
+        },
+        "cpu": {
+          "eval_time": 1136.500,
+          "wrap_time": 363.241
+        },
+        "dcu": {
+          "eval_time": 494.063,
+          "wrap_time": 3888.606
+        }
+      }
+    },
+    {
+      "batch_size": 64,
+      "backend": {
+        "cuda": {
+          "eval_time": 257.866,
+          "wrap_time": 478.840
+        },
+        "cpu": {
+          "eval_time": 2294.568,
+          "wrap_time": 361.753
+        },
+        "dcu": {
+          "eval_time": 526.791,
+          "wrap_time": 3800.998
+        }
+      }
+    }
+  ],
+  "resnet50": [
+    {
+      "batch_size": 8,
+      "backend": {
+        "cuda": {
+          "eval_time": 226.898,
+          "wrap_time": 926.357
+        },
+        "cpu": {
+          "eval_time": 1091.771,
+          "wrap_time": 790.464
+        },
+        "dcu": {
+          "eval_time": 554.959,
+          "wrap_time": 4934.522
+        }
+      }
+    },
+    {
+      "batch_size": 16,
+      "backend": {
+        "cuda": {
+          "eval_time": 266.203,
+          "wrap_time": 924.751
+        },
+        "cpu": {
+          "eval_time": 2228.047,
+          "wrap_time": 832.636
+        },
+        "dcu": {
+          "eval_time": 564.939,
+          "wrap_time": 4888.173
+        }
+      }
+    },
+    {
+      "batch_size": 32,
+      "backend": {
+        "cuda": {
+          "eval_time": 1013.840,
+          "wrap_time": 913.363
+        },
+        "cpu": {
+          "eval_time": 4621.932,
+          "wrap_time": 794.577
+        },
+        "dcu": {
+          "eval_time": 587.251,
+          "wrap_time": 4928.363
+        }
+      }
+    },
+    {
+      "batch_size": 64,
+      "backend": {
+        "cuda": {
+          "eval_time": 2925.615,
+          "wrap_time": 975.309
+        },
+        "cpu": {
+          "eval_time": 9486.076,
+          "wrap_time": 809.129
+        },
+        "dcu": {
+          "eval_time": 670.989,
+          "wrap_time": 5001.795
+        }
+      }
+    }
+  ]
+}

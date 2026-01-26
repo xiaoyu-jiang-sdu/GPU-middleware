@@ -22,7 +22,7 @@ class TraceGanttWidget(QGroupBox):
         self._lane_durations = defaultdict(float)  # lane 总时间
         self.canvas.mpl_connect("motion_notify_event", self._on_hover)
 
-    def load_trace(self, trace_path: Path, model="", backend=""):
+    def load_trace(self, trace_path: Path, model="", backend="", batch_size=""):
         if not trace_path.exists():
             raise FileNotFoundError(trace_path)
 
@@ -30,9 +30,9 @@ class TraceGanttWidget(QGroupBox):
             data = json.load(f)
 
         events = data.get("traceEvents", [])
-        self._render(events, model, backend)
+        self._render(events, model, backend, batch_size)
 
-    def _render(self, events, model="", backend=""):
+    def _render(self, events, model="", backend="", batch_size=""):
         self._bars.clear()
         self._lane_durations.clear()
         self.figure.clear()
@@ -92,7 +92,7 @@ class TraceGanttWidget(QGroupBox):
         ax.set_yticks(yticks)
         ax.set_yticklabels(ylabels)
         ax.set_xlabel("Time (ms)")
-        title = f"{model} on {backend}" if model else "Inference Timeline"
+        title = f"{model} on {backend} batch size {batch_size} Inference Timeline" if model else "Inference Timeline"
         ax.set_title(title)
         ax.grid(True, axis="x", linestyle="--", alpha=0.3)
         self.figure.subplots_adjust(left=0.25)

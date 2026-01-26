@@ -98,6 +98,7 @@ class DcuAdapter(BackendAdapter):
             self.ctx
         )
         return out
+
     def matmul(self, a, b):
         a = self._to_dcu_tensor(a)  # [M, N]
         b = self._to_dcu_tensor(b)  # [N, K]

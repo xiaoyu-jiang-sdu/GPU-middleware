@@ -48,18 +48,20 @@ class InferencePage(QWidget):
         self.control_bar.run_clicked.connect(self.on_run_clicked)
 
     # 运行推理
-    def on_run_clicked(self, device_name: str, model_name: str):
-        self.log_panel.log(f"启动推理：设备={device_name}, 模型={model_name}")
+    def on_run_clicked(self, device_name: str, model_name: str, batch_size: str):
+        self.log_panel.log(f"[Host] Executing evaluation：device={device_name},"
+                           f" model={model_name}, batch_size={batch_size}")
 
         if device_name not in self.devices:
-            self.log_panel.log(f"错误：未找到设备 {device_name}")
+            self.log_panel.log(f"[Host ERROR] device {device_name} not found")
             return
 
         device = self.devices[device_name]
         # 创建推理线程
         self._thread = InferenceThread(
             model=model_name,
-            device=device
+            device=device,
+            batch_size=batch_size
         )
 
         # 连接日志与完成信号
@@ -70,13 +72,14 @@ class InferencePage(QWidget):
         self._thread.start()
 
     # 推理完成回调
-    def on_inference_done(self, _, elapsed_ms: float):
-        self.log_panel.log(f"推理完成")
+    def on_inference_done(self, elapsed_ms: float):
+        self.log_panel.log(f"[Host] evaluation completed")
 
         backend = self.control_bar.backend_combo.currentText()
         model = self.control_bar.model_combo.currentText()
+        batch_size = self.control_bar.batch_size_combo.currentText()
         trace_path = ProjectConfig.trace_dir() / "trace.json"
-        self.trace_view.load_trace(trace_path, model, backend)
+        self.trace_view.load_trace(trace_path, model, backend, batch_size)
 
         self.perf_panel.update_perf(
             backend=self.control_bar.backend_combo.currentText(),

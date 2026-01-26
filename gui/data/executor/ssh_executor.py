@@ -1,4 +1,3 @@
-import json
 from typing import Optional, Tuple
 import paramiko
 import threading
@@ -8,7 +7,7 @@ from gui.data.driver.ssh_config import SSHConfig
 from gui.data.executor.base import Executor
 from gui.utils.cmd_utils import build_full_command
 
-from utils.trace import TRACE_PREFIX, recorder
+from utils.trace import parse_trace_line
 
 
 class SSHExecutor(Executor):
@@ -68,23 +67,12 @@ class SSHExecutor(Executor):
             stdout_buf = []
             stderr_buf = []
 
-            def _handle_trace_line(line: str) -> bool:
-                if not line.startswith(TRACE_PREFIX):
-                    return False
-                try:
-                    payload = line[len(TRACE_PREFIX):].strip()
-                    event = json.loads(payload)
-                    recorder.events.append(event)
-                    return True
-                except Exception:
-                    return False
-
             def _read_stream(stream, buf):
                 if stream is None:
                     return
                 try:
                     for line in iter(stream.readline, ""):
-                        if _handle_trace_line(line):
+                        if parse_trace_line(line):
                             continue
                         buf.append(line)
                 finally:
