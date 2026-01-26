@@ -35,9 +35,7 @@ class InferencePage(QWidget):
         main_layout.addWidget(self.perf_panel)
         self._thread = None
 
-        # -------------------------------
         # 加载设备
-        # -------------------------------
         self.devices = []
         self.devices = load_devices()
         # 动态设置后端下拉选项
@@ -46,14 +44,10 @@ class InferencePage(QWidget):
             self.control_bar.backend_combo.clear()
             self.control_bar.backend_combo.addItems(device_names)
 
-        # -------------------------------
         # 信号连接
-        # -------------------------------
         self.control_bar.run_clicked.connect(self.on_run_clicked)
 
-    # -------------------------------
-    # 点击运行推理
-    # -------------------------------
+    # 运行推理
     def on_run_clicked(self, device_name: str, model_name: str):
         self.log_panel.log(f"启动推理：设备={device_name}, 模型={model_name}")
 
@@ -62,9 +56,7 @@ class InferencePage(QWidget):
             return
 
         device = self.devices[device_name]
-        # -------------------
         # 创建推理线程
-        # -------------------
         self._thread = InferenceThread(
             model=model_name,
             device=device
@@ -77,9 +69,7 @@ class InferencePage(QWidget):
         # 启动线程
         self._thread.start()
 
-    # -------------------------------
     # 推理完成回调
-    # -------------------------------
     def on_inference_done(self, _, elapsed_ms: float):
         self.log_panel.log(f"推理完成")
 

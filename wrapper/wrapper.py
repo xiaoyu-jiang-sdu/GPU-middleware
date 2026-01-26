@@ -3,7 +3,7 @@ import torch.nn as nn
 from utils.onnx_utils import export_onnx, parse_onnx_model
 from IR.executor import IRExecutor
 from adapter.factory import create_adapter
-from utils.trace import trace_instant, trace_block
+from utils.trace import trace_instant
 
 
 class ONNXModelWrapper(nn.Module):
@@ -34,3 +34,7 @@ class ONNXModelWrapper(nn.Module):
     def forward(self, x):
         # 默认拷贝回cpu用于展示
         return self.adapter.to_numpy(self.executor.run({"input": x}))
+
+    def op_adapter_mapping(self):
+        # 返回使用的op与adapter方法映射
+        return self.executor.collect_op_adapter_mapping()

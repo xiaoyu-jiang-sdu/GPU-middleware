@@ -6,9 +6,6 @@ import numpy as np
 import argparse
 from utils.trace import trace_block_emit
 
-import os
-os.environ["TORCH_HOME"] = "E:/torch_cache"
-
 
 # 模型评估参数
 def parse_args():

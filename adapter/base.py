@@ -94,5 +94,6 @@ class BackendAdapter(ABC):
     # =========================
     # 归一化
     # =========================
+    @abstractmethod
     def batch_norm_2d(self, x, weight, bias, running_mean, running_var, eps):
         pass

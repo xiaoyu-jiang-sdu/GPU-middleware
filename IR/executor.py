@@ -26,3 +26,24 @@ class IRExecutor:
                 self.adapter._current_op = op.name
                 op.run(self.tensors, self.adapter)
         return self.tensors[self.graph.outputs[0]]
+
+    def collect_op_adapter_mapping(self):
+        """
+        统计当前 IR graph 中使用到的 op 类型
+        以及它们对应使用的 adapter 方法
+        """
+        mapping = {}
+
+        for op in self.ops:
+            op_cls = op.__class__
+            op_name = op_cls.__name__
+
+            if op_name not in mapping:
+                mapping[op_name] = {
+                    "adapter_methods": set(op_cls.ADAPTER_METHODS),
+                    "count": 0,
+                }
+
+            mapping[op_name]["count"] += 1
+
+        return mapping

@@ -224,27 +224,54 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                                     dilation_h, dilation_w);
     miopenSetConvolutionGroupCount(conv_desc, groups);
 
-    // 工作空间
+    // 构造卷积 key
+    ConvKey key{N, C, H, W, K, R, S,
+                stride_h, stride_w,
+                pad_h, pad_w,
+                dilation_h, dilation_w,
+                groups};
+
+    miopenConvFwdAlgorithm_t algo;
     size_t workspace_size = 0;
-    miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
-                                             x_desc, w_desc, conv_desc, y_desc, &workspace_size);
-    void* workspace = nullptr;
-    if (workspace_size > 0) {
-        CHECK_HIP(hipMalloc(&workspace, workspace_size));
+
+    // 查缓存
+    auto it = ctx->conv_algo_cache_.find(key);
+    if (it != ctx->conv_algo_cache_.end()) {
+        algo = it->second.algo;
+        workspace_size = it->second.workspace_size;
+    } else {
+        // 第一次查找最优算法
+        miopenConvAlgoPerf_t perfResults;
+        int returnedAlgoCount = 0;
+
+        size_t ws_size = 0;
+        miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
+                                                 x_desc, w_desc, conv_desc, y_desc, &ws_size);
+        void* workspace = nullptr;
+        if (ws_size > 0) CHECK_HIP(hipMalloc(&workspace, ws_size));
+
+        miopenFindConvolutionForwardAlgorithm(ctx->get_miopen(),
+                                              x_desc, x_data,
+                                              w_desc, w_data,
+                                              conv_desc,
+                                              y_desc, y_data,
+                                              1, &returnedAlgoCount,
+                                              &perfResults,
+                                              workspace, ws_size,
+                                              false);
+
+        algo = perfResults.fwd_algo;
+        workspace_size = perfResults.memory;
+
+        // 缓存算法到 context
+        ctx->conv_algo_cache_[key] = {algo, workspace_size};
+
+        if (workspace) CHECK_HIP(hipFree(workspace));
     }
 
-    // 搜索最优算法
-    miopenConvAlgoPerf_t perfResults;
-    int returnedAlgoCount = 0;
-    miopenFindConvolutionForwardAlgorithm(ctx->get_miopen(),
-                                          x_desc, x_data,
-                                          w_desc, w_data,
-                                          conv_desc,
-                                          y_desc, y_data,
-                                          1, &returnedAlgoCount,
-                                          &perfResults,
-                                          workspace, workspace_size,
-                                          false);
+    // 分配 workspace 并执行卷积
+    void* workspace = nullptr;
+    if (workspace_size > 0) CHECK_HIP(hipMalloc(&workspace, workspace_size));
 
     float alpha = 1.0f, beta = 0.0f;
     miopenConvolutionForward(ctx->get_miopen(),
@@ -252,12 +279,13 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                              x_desc, x_data,
                              w_desc, w_data,
                              conv_desc,
-                             perfResults.fwd_algo,
+                             algo,
                              &beta,
                              y_desc, y_data,
                              workspace, workspace_size);
 
     if (workspace) CHECK_HIP(hipFree(workspace));
+
 
     // 清理描述符
     miopenDestroyTensorDescriptor(x_desc);

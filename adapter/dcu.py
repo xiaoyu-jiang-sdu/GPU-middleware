@@ -16,9 +16,9 @@ class DcuAdapter(BackendAdapter):
         # 参数缓存
         self._param_cache = {}
 
-    # ------------------------
+    # =========================
     # 张量管理
-    # ------------------------
+    # =========================
     def _to_dcu_tensor(self, data, cache=False, cache_key=None):
         if data is None:
             return None
@@ -55,9 +55,9 @@ class DcuAdapter(BackendAdapter):
             return tensor.to_numpy()
         return tensor
 
-    # ------------------------
+    # =========================
     # 基础算子
-    # ------------------------
+    # =========================
     def add(self, a, b):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
@@ -96,9 +96,9 @@ class DcuAdapter(BackendAdapter):
         self.engine.mul_scalar(x, out, float(scalar), np.prod(x.shape()), self.ctx)
         return out
 
-    # ------------------------
+    # =========================
     # CNN算子
-    # ------------------------
+    # =========================
     def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1):
         x = self._to_dcu_tensor(x)
         w = self._to_dcu_tensor(w, cache=True, cache_key=id(w))
@@ -123,7 +123,6 @@ class DcuAdapter(BackendAdapter):
 
         if b is not None:
             # 保留 NCHW 维度，bias shape [K] → [1,K,1,1]
-            bias_reshaped = dcu.DCUTensor([1, K, 1, 1])
             self.engine.add_broadcast_nd(out, self._to_dcu_tensor(b), out,
                                          out.shape(), [1, K, 1, 1], self.ctx)
 
@@ -159,9 +158,9 @@ class DcuAdapter(BackendAdapter):
         self.engine.flatten(x, out, outer, inner, self.ctx)
         return out
 
-    # ------------------------
-    # BatchNorm
-    # ------------------------
+    # =========================
+    # 归一化
+    # =========================
     def batch_norm_2d(self, x, weight, bias, running_mean, running_var, eps=1e-5):
         x = self._to_dcu_tensor(x)
         weight = self._to_dcu_tensor(weight, cache=True, cache_key=id(weight))

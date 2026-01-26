@@ -18,9 +18,11 @@ class ControlBarWidget(QGroupBox):
 
         # 下拉框
         self.backend_combo = QComboBox()
+        self.backend_combo.setFont(QFont("Microsoft YaHei", 16))
         self.backend_combo.setObjectName("ControlCombo")
 
         self.model_combo = QComboBox()
+        self.model_combo.setFont(QFont("Microsoft YaHei", 16))
         self.model_combo.setObjectName("ControlCombo")
         self._load_models()
 
@@ -54,7 +56,7 @@ class ControlBarWidget(QGroupBox):
         self.run_btn.clicked.connect(self._emit_run)
 
     def _load_models(self):
-        """动态加载注册的模型名"""
+        # 动态加载注册的模型名
         self.model_combo.clear()
         model_names = sorted(MODEL_REGISTRY.keys())
         self.model_combo.addItems(model_names)
