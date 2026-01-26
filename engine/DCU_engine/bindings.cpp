@@ -43,7 +43,6 @@ PYBIND11_MODULE(dcu, m) {
     py::class_<DCUEngine>(m, "Engine")
         .def(py::init<>())
         .def("add", &DCUEngine::add)
-        .def("add_broadcast_nd", &DCUEngine::add_broadcast_nd)
         .def("matmul", &DCUEngine::matmul)
         .def("relu", &DCUEngine::relu)
         .def("transpose", &DCUEngine::transpose)

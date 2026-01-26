@@ -110,7 +110,7 @@ class SSHExecutor(Executor):
             stdout_str = "".join(stdout_buf)
             stderr_str = "".join(stderr_buf)
 
-            print(f"[SSH {self.cfg.hostname}] return_code={return_code}")
+            print(f"[SSH: {self.cfg.hostname}] return_code={return_code}")
 
             return stdout_str, stderr_str, return_code
 

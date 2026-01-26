@@ -11,12 +11,6 @@ namespace dcu {
 // ------------------------
 // 全局kernel函数
 // ------------------------
-__global__ void add_kernel(float* a, float* b, float* o, int n) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) o[i] = a[i] + b[i];
-    return;
-}
-
 __global__ void relu_kernel(float* x, float* o, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) o[i] = x[i] > 0 ? x[i] : 0;
@@ -40,82 +34,158 @@ __global__ void transpose_kernel(float* x, float* y,
 }
 
 __global__ void add_broadcast_nd_kernel(
-    const float* a, const float* b, float* out,
-    const int* a_strides, const int* b_strides,
-    const int* b_shape,
-    int ndim, int total)
+    const float* __restrict__ a,
+    const float* __restrict__ b,
+    float* __restrict__ out,
+    const int* __restrict__ out_shape,
+    const int* __restrict__ a_shape,
+    const int* __restrict__ b_shape,
+    const int* __restrict__ a_strides,
+    const int* __restrict__ b_strides,
+    int ndim,
+    int total)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= total) return;
 
     int tmp = idx;
+    int a_idx = 0;
     int b_idx = 0;
-    for (int d = 0; d < ndim; ++d) {
-        int i = tmp / a_strides[d];
-        tmp = tmp % a_strides[d];
-        int bi = (b_shape[d] == 1) ? 0 : i;
-        b_idx += bi * b_strides[d];
+
+    for (int d = ndim - 1; d >= 0; --d) {
+        int coord = tmp % out_shape[d];
+        tmp /= out_shape[d];
+
+        int a_coord = (a_shape[d] == 1) ? 0 : coord;
+        int b_coord = (b_shape[d] == 1) ? 0 : coord;
+
+        a_idx += a_coord * a_strides[d];
+        b_idx += b_coord * b_strides[d];
     }
-    out[idx] = a[idx] + b[b_idx];
+
+    out[idx] = a[a_idx] + b[b_idx];
 }
+
 // ------------------------
-// add 实现
+// add 实现，广播加法
 // ------------------------
-void DCUEngine::add(DCUTensor* a, DCUTensor* b, DCUTensor* o, int n, DCUContext*) {
-    hipLaunchKernelGGL(add_kernel,
-        dim3((n + 255) / 256), dim3(256), 0, 0,
-        (float*)a->data(), (float*)b->data(), (float*)o->data(), n);
+
+static std::vector<int> compute_strides(const std::vector<int>& shape) {
+    int ndim = shape.size();
+    std::vector<int> strides(ndim, 1);
+    for (int i = ndim - 2; i >= 0; --i) {
+        strides[i] = strides[i + 1] * shape[i + 1];
+    }
+    return strides;
 }
-// ------------------------
-// add_broadcast_nd 实现
-// ------------------------
-void DCUEngine::add_broadcast_nd(
-    DCUTensor* a, DCUTensor* b, DCUTensor* out,
+
+static std::vector<int> compute_broadcast_shape(
+    const std::vector<int>& a_shape,
+    const std::vector<int>& b_shape)
+{
+    int na = a_shape.size();
+    int nb = b_shape.size();
+    int ndim = std::max(na, nb);
+
+    std::vector<int> out_shape(ndim, 1);
+
+    for (int i = 0; i < ndim; ++i) {
+        int da = (i < ndim - na) ? 1 : a_shape[i - (ndim - na)];
+        int db = (i < ndim - nb) ? 1 : b_shape[i - (ndim - nb)];
+
+        if (da == db || da == 1 || db == 1) {
+            out_shape[i] = std::max(da, db);
+        } else {
+            throw std::runtime_error("Invalid broadcast shapes");
+        }
+    }
+    return out_shape;
+}
+
+void DCUEngine::add(
+    DCUTensor* a,
+    DCUTensor* b,
+    DCUTensor* out,
     const std::vector<int>& a_shape,
     const std::vector<int>& b_shape,
     DCUContext* ctx)
 {
-    int ndim = a_shape.size();
-    std::vector<int> a_strides(ndim), b_strides(ndim);
+    // out_shape
+    std::vector<int> out_shape = compute_broadcast_shape(a_shape, b_shape);
+    int ndim = out_shape.size();
 
-    // 计算 strides
-    a_strides[ndim-1] = 1;
-    b_strides[ndim-1] = 1;
-    for (int i = ndim-2; i >= 0; --i) {
-        a_strides[i] = a_strides[i+1] * a_shape[i+1];
-        b_strides[i] = b_strides[i+1] * b_shape[i+1];
-    }
-
+    // 元素总数
     int total = 1;
-    for (auto d : a_shape) total *= d;
+    for (int d : out_shape) total *= d;
 
-    // 分配 GPU 内存
-    int *d_a_strides = nullptr, *d_b_strides = nullptr, *d_b_shape = nullptr;
+    if (total == 0) return;
+
+    // strides
+    std::vector<int> a_shape_aligned(ndim, 1);
+    std::vector<int> b_shape_aligned(ndim, 1);
+
+    // 右对齐
+    std::copy(a_shape.begin(), a_shape.end(),
+              a_shape_aligned.begin() + (ndim - a_shape.size()));
+    std::copy(b_shape.begin(), b_shape.end(),
+              b_shape_aligned.begin() + (ndim - b_shape.size()));
+
+    auto a_strides = compute_strides(a_shape_aligned);
+    auto b_strides = compute_strides(b_shape_aligned);
+
+    int *d_out_shape = nullptr;
+    int *d_a_shape = nullptr;
+    int *d_b_shape = nullptr;
+    int *d_a_strides = nullptr;
+    int *d_b_strides = nullptr;
+
+    CHECK_HIP(hipMalloc(&d_out_shape, ndim * sizeof(int)));
+    CHECK_HIP(hipMalloc(&d_a_shape, ndim * sizeof(int)));
+    CHECK_HIP(hipMalloc(&d_b_shape, ndim * sizeof(int)));
     CHECK_HIP(hipMalloc(&d_a_strides, ndim * sizeof(int)));
     CHECK_HIP(hipMalloc(&d_b_strides, ndim * sizeof(int)));
-    CHECK_HIP(hipMalloc(&d_b_shape, ndim * sizeof(int)));
 
-    // 拷贝到 GPU
-    CHECK_HIP(hipMemcpy(d_a_strides, a_strides.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
-    CHECK_HIP(hipMemcpy(d_b_strides, b_strides.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
-    CHECK_HIP(hipMemcpy(d_b_shape, b_shape.data(), ndim*sizeof(int), hipMemcpyHostToDevice));
+    CHECK_HIP(hipMemcpyAsync(d_out_shape, out_shape.data(),
+                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
+    CHECK_HIP(hipMemcpyAsync(d_a_shape, a_shape_aligned.data(),
+                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
+    CHECK_HIP(hipMemcpyAsync(d_b_shape, b_shape_aligned.data(),
+                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
+    CHECK_HIP(hipMemcpyAsync(d_a_strides, a_strides.data(),
+                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
+    CHECK_HIP(hipMemcpyAsync(d_b_strides, b_strides.data(),
+                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
 
     // launch kernel
-    int block = 256;
-    int grid = (total + block - 1) / block;
-    hipLaunchKernelGGL(add_broadcast_nd_kernel,
-                       dim3(grid), dim3(block), 0, 0,
-                       static_cast<float*>(a->data()),
-                       static_cast<float*>(b->data()),
-                       static_cast<float*>(out->data()),
-                       d_a_strides, d_b_strides, d_b_shape,
-                       ndim, total);
+    constexpr int BLOCK = 256;
+    int GRID = (total + BLOCK - 1) / BLOCK;
 
-    // 释放 GPU 内存
-    CHECK_HIP(hipFree(d_a_strides));
-    CHECK_HIP(hipFree(d_b_strides));
-    CHECK_HIP(hipFree(d_b_shape));
+    hipLaunchKernelGGL(
+        add_broadcast_nd_kernel,
+        dim3(GRID), dim3(BLOCK), 0, ctx->get_stream(),
+        static_cast<const float*>(a->data()),
+        static_cast<const float*>(b->data()),
+        static_cast<float*>(out->data()),
+        d_out_shape,
+        d_a_shape,
+        d_b_shape,
+        d_a_strides,
+        d_b_strides,
+        ndim,
+        total
+    );
+
+    CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
+
+    hipFree(d_out_shape);
+    hipFree(d_a_shape);
+    hipFree(d_b_shape);
+    hipFree(d_a_strides);
+    hipFree(d_b_strides);
 }
+
+
+
 // ------------------------
 // matmul 实现
 // ------------------------
@@ -187,13 +257,13 @@ void DCUEngine::mul_scalar(DCUTensor* x, DCUTensor* o,
 // conv2d 实现
 // ------------------------
 void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
-                                int N, int C, int H, int W,
-                                int K, int R, int S,
-                                int stride_h, int stride_w,
-                                int pad_h, int pad_w,
-                                int dilation_h, int dilation_w,
-                                int groups,
-                                DCUContext* ctx)
+                       int N, int C, int H, int W,
+                       int K, int R, int S,
+                       int stride_h, int stride_w,
+                       int pad_h, int pad_w,
+                       int dilation_h, int dilation_w,
+                       int groups,
+                       DCUContext* ctx)
 {
     float* x_data = static_cast<float*>(x->data());
     float* w_data = static_cast<float*>(w->data());
@@ -211,7 +281,7 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
     miopenCreateTensorDescriptor(&y_desc);
 
     miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
-    miopenSet4dTensorDescriptor(w_desc, miopenFloat, K, C/groups, R, S);
+    miopenSet4dTensorDescriptor(w_desc, miopenFloat, K, C / groups, R, S);
     miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, K, Ho, Wo);
 
     // 卷积描述符
@@ -225,11 +295,11 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
     miopenSetConvolutionGroupCount(conv_desc, groups);
 
     // 构造卷积 key
-    ConvKey key{N, C, H, W, K, R, S,
-                stride_h, stride_w,
-                pad_h, pad_w,
-                dilation_h, dilation_w,
-                groups};
+    dcu::ConvKey key{N, C, H, W, K, R, S,
+                     stride_h, stride_w,
+                     pad_h, pad_w,
+                     dilation_h, dilation_w,
+                     groups};
 
     miopenConvFwdAlgorithm_t algo;
     size_t workspace_size = 0;
@@ -244,12 +314,20 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
         miopenConvAlgoPerf_t perfResults;
         int returnedAlgoCount = 0;
 
-        size_t ws_size = 0;
+        // 获取可能的最大 workspace
+        size_t max_ws_size = 0;
         miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
-                                                 x_desc, w_desc, conv_desc, y_desc, &ws_size);
-        void* workspace = nullptr;
-        if (ws_size > 0) CHECK_HIP(hipMalloc(&workspace, ws_size));
+                                                 x_desc, w_desc, conv_desc, y_desc, &max_ws_size);
 
+        // 如果 max_ws_size 为 0，强制设置一个保底值，避免 find 阶段警告
+        if (max_ws_size == 0) {
+            max_ws_size = 64ULL * 1024 * 1024;  // 64MB 保底
+        }
+
+        void* workspace = nullptr;
+        if (max_ws_size > 0) CHECK_HIP(hipMalloc(&workspace, max_ws_size));
+
+        // 查找最优算法
         miopenFindConvolutionForwardAlgorithm(ctx->get_miopen(),
                                               x_desc, x_data,
                                               w_desc, w_data,
@@ -257,21 +335,32 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                                               y_desc, y_data,
                                               1, &returnedAlgoCount,
                                               &perfResults,
-                                              workspace, ws_size,
+                                              workspace, max_ws_size,
                                               false);
 
         algo = perfResults.fwd_algo;
         workspace_size = perfResults.memory;
 
-        // 缓存算法到 context
+        // 重新查询实际最大 workspace
+        size_t real_ws = 0;
+        miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
+                                                 x_desc, w_desc, conv_desc, y_desc, &real_ws);
+        workspace_size = std::max(workspace_size, real_ws);
+        if (workspace_size == 0) {
+            workspace_size = 64ULL * 1024 * 1024;  // 如果仍为 0，设置保底
+        }
+
+        // 缓存算法
         ctx->conv_algo_cache_[key] = {algo, workspace_size};
 
         if (workspace) CHECK_HIP(hipFree(workspace));
     }
 
-    // 分配 workspace 并执行卷积
+    // 分配需要的 workspace 并执行卷积
     void* workspace = nullptr;
-    if (workspace_size > 0) CHECK_HIP(hipMalloc(&workspace, workspace_size));
+    if (workspace_size > 0) {
+        CHECK_HIP(hipMalloc(&workspace, workspace_size));
+    }
 
     float alpha = 1.0f, beta = 0.0f;
     miopenConvolutionForward(ctx->get_miopen(),
@@ -285,7 +374,6 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                              workspace, workspace_size);
 
     if (workspace) CHECK_HIP(hipFree(workspace));
-
 
     // 清理描述符
     miopenDestroyTensorDescriptor(x_desc);

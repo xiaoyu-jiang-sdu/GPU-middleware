@@ -31,7 +31,7 @@ int main() {
     CHECK_HIP(hipMemcpy(A.data(), ha.data(), n * sizeof(float), hipMemcpyHostToDevice));
     CHECK_HIP(hipMemcpy(B.data(), hb.data(), n * sizeof(float), hipMemcpyHostToDevice));
 
-    engine.add(&A, &B, &O, n, &ctx);
+    engine.add(&A, &B, &O, A.shape(), B.shape() , &ctx);
 
     std::vector<float> ho(n);
     CHECK_HIP(hipMemcpy(ho.data(), O.data(), n * sizeof(float), hipMemcpyDeviceToHost));

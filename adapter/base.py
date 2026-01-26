@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 
-from adapter.factory import wrap_adapter_method
-
 """
 后端硬件抽象接口
 该抽象类定义了所有计算后端（CPU / GPU / MLU / NPU）
@@ -12,24 +10,6 @@ Operator 层只允许通过本接口调用底层计算资源，
 
 
 class BackendAdapter(ABC):
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
-        for attr_name, attr in list(cls.__dict__.items()):
-            # 只处理 callable
-            if not callable(attr):
-                continue
-            if attr_name.startswith("_"):
-                continue
-
-            # 跳过抽象方法
-            if getattr(attr, "__isabstractmethod__", False):
-                continue
-
-            # 包装方法
-            wrapped = wrap_adapter_method(attr_name, attr)
-            setattr(cls, attr_name, wrapped)
-
     # =========================
     # 张量管理
     # =========================

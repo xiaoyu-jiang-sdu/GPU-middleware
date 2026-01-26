@@ -3,13 +3,13 @@ import torch.nn as nn
 import torch.optim as optim
 
 from torchvision.models import resnet18
-from model.model import ONNXAwareModel
+from wrapper.wrapper import ONNXModelWrapper
 
 # 原始模型
 base_model = resnet18(num_classes=10)
 
 # 包装
-model = ONNXAwareModel(
+model = ONNXModelWrapper(
     base_model,
     input_shape=(1, 3, 224, 224),
     backend="cuda"

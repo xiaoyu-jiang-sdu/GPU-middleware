@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from wrapper.wrapper import ONNXModelWrapper
 
 
 def compare_torch_and_backend(
@@ -16,19 +17,16 @@ def compare_torch_and_backend(
         torch_out = module(input_tensor)
 
     # backend
-    from model.model import ONNXAwareModel
-    backend_model = ONNXAwareModel(
+    backend_model = ONNXModelWrapper(
         module,
         input_shape=tuple(input_tensor.shape),
         backend=backend
     )
 
-    with torch.no_grad():
-        backend_out = backend_model(input_tensor)
+    b = backend_model(input_tensor)
 
     # 转 numpy
     a = torch_out.detach().cpu().numpy()
-    b = backend_out.to_numpy()
 
     max_err = np.max(np.abs(a - b))
     mean_err = np.mean(np.abs(a - b))

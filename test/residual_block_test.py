@@ -25,7 +25,7 @@ def test_residual_block():
     torch.manual_seed(0)
 
     # 输入: [N, C, H, W]
-    x = torch.randn(1, 8, 32, 32, device="cpu")
+    x = torch.randn(64, 8, 32, 32, device="cpu")
 
     # 卷积权重: 保持通道数一致，便于残差相加
     w1 = torch.randn(8, 8, 3, 3, device="cpu")

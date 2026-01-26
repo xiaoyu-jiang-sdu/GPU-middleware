@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from test_engine import compare_torch_and_backend
-from model.model import ONNXAwareModel
+
+
 class Linear(nn.Module):
     def __init__(self):
         super().__init__()

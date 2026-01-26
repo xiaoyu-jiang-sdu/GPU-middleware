@@ -20,7 +20,8 @@ class InferenceThread(QThread):
         try:
             with self.device as d:
                 device_type = d.cfg.type.value
-                cmd = d.cfg.runtime.py_path + " eval.py" + f" --device={device_type} --model={self.model}"
+                cmd = d.cfg.runtime.py_path + " eval.py" + (f" --device={device_type} --model={self.model} "
+                                                            f"--batch_size=2")
                 out, err, code = d.run(cmd, cwd=d.cfg.runtime.cwd)
 
                 # 转为字符串

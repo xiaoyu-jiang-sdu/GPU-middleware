@@ -31,14 +31,22 @@ class DcuAdapter(BackendAdapter):
 
         # torch.Tensor → numpy
         if isinstance(data, torch.Tensor):
-            data = data.detach().cpu().contiguous().numpy().astype(np.float32)
+            data = data.detach().cpu()
+            if data.dim() == 0:
+                data = data.view(1)  # 或者 data.unsqueeze(0)
+            data = data.contiguous().numpy().astype(np.float32)
+
         elif isinstance(data, np.ndarray):
+            if data.ndim == 0:
+                data = data.reshape(1)
             data = data.astype(np.float32, copy=False)
+
         else:
             data = np.array(data, dtype=np.float32)
+            if data.ndim == 0:
+                data = data.reshape(1)
 
         t = dcu.DCUTensor(data)
-
         if cache and cache_key is not None:
             self._param_cache[cache_key] = t
 
@@ -58,13 +66,38 @@ class DcuAdapter(BackendAdapter):
     # =========================
     # 基础算子
     # =========================
+
+    # 推算广播加法的shape
+    @staticmethod
+    def _broadcast_shape(a_shape, b_shape):
+        na, nb = len(a_shape), len(b_shape)
+        ndim = max(na, nb)
+        out = []
+
+        for i in range(ndim):
+            da = a_shape[i - (ndim - na)] if i >= ndim - na else 1
+            db = b_shape[i - (ndim - nb)] if i >= ndim - nb else 1
+
+            if da == db or da == 1 or db == 1:
+                out.append(max(da, db))
+            else:
+                raise ValueError(f"Invalid broadcast: {a_shape} vs {b_shape}")
+
+        return tuple(out)
+
     def add(self, a, b):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
-        out = dcu.DCUTensor(a.shape())
-        self.engine.add(a, b, out, np.prod(a.shape()), self.ctx)
-        return out
 
+        out_shape = self._broadcast_shape(a.shape(), b.shape())
+        out = dcu.DCUTensor(list(out_shape))
+
+        self.engine.add(
+            a, b, out,
+            list(a.shape()), list(b.shape()),
+            self.ctx
+        )
+        return out
     def matmul(self, a, b):
         a = self._to_dcu_tensor(a)  # [M, N]
         b = self._to_dcu_tensor(b)  # [N, K]

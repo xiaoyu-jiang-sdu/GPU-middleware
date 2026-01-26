@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument("--num_classes", type=int, default=10, help="model output classes")
     parser.add_argument("--device", type=str, default="cuda", help="choose device to eval model")
     parser.add_argument("--seed", type=int, default=2026, help="random seed for np and torch")
+    parser.add_argument("--batch_size", type=int, default=1, help="batch size for test")
     model_args = parser.parse_args()
 
     return model_args
@@ -27,6 +28,8 @@ def set_configs(seed=2026):
 
 
 if __name__ == "__main__":
+    import os
+    os.environ["TORCH_HOME"] = "E:\\torch_cache"
     args = parse_args()
     set_configs(args.seed)
     # 原始模型
@@ -42,11 +45,11 @@ if __name__ == "__main__":
             input_shape,
             backend=args.device
         )
-    x = torch.randn(1, 3, 224, 224)
+    x = torch.randn(args.batch_size, 3, 224, 224)
 
     with trace_block_emit("Total evaluation", model=args.model, backend=args.device):
         out = model(x)
     print("eval finish! out info:")
-    print(out)
+    np.save(f"{args.model}_evaluation_on_{args.device}", out)
     print("shape:", out.shape)
     print("mean:", out.mean(), "max:", out.max(), "min:", out.min())

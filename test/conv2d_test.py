@@ -19,7 +19,7 @@ class Conv2DTest(nn.Module):
 
 def test_conv2d():
     torch.manual_seed(0)
-    x = torch.randn(1, 3, 32, 32, device="cpu")
+    x = torch.randn(64, 3, 32, 32, device="cpu")
     w = torch.randn(8, 3, 3, 3, device="cpu")
     b = None
 
