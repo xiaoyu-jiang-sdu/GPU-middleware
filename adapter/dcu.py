@@ -33,7 +33,7 @@ class DcuAdapter(BackendAdapter):
         if isinstance(data, torch.Tensor):
             data = data.detach().cpu()
             if data.dim() == 0:
-                data = data.view(1)  # 或者 data.unsqueeze(0)
+                data = data.view(1)
             data = data.contiguous().numpy().astype(np.float32)
 
         elif isinstance(data, np.ndarray):
@@ -64,7 +64,7 @@ class DcuAdapter(BackendAdapter):
         return tensor
 
     # =========================
-    # 基础算子
+    # 基础算子, 二元运算符
     # =========================
 
     # 推算广播加法的shape
@@ -88,56 +88,122 @@ class DcuAdapter(BackendAdapter):
     def add(self, a, b):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
-
-        out_shape = self._broadcast_shape(a.shape(), b.shape())
-        out = dcu.DCUTensor(list(out_shape))
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
 
         self.engine.add(
             a, b, out,
-            list(a.shape()), list(b.shape()),
             self.ctx
         )
         return out
 
-    def matmul(self, a, b):
-        a = self._to_dcu_tensor(a)  # [M, N]
-        b = self._to_dcu_tensor(b)  # [N, K]
+    def sub(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
 
-        M, N = a.shape()
-        N2, K = b.shape()
-        assert N == N2
-
-        out = dcu.DCUTensor([M, K])
-        self.engine.matmul(a, b, out, M, K, N, self.ctx)
+        self.engine.sub(
+            a, b, out,
+            self.ctx
+        )
         return out
 
-    def relu(self, x):
-        x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape())
-        self.engine.relu(x, out, np.prod(x.shape()), self.ctx)
+    def mul(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+
+        self.engine.mul(
+            a, b, out,
+            self.ctx
+        )
         return out
 
-    def transpose(self, x):
-        x = self._to_dcu_tensor(x)
-        rows, cols = x.shape()
-        out = dcu.DCUTensor([cols, rows])
-        self.engine.transpose(x, out, rows, cols, self.ctx)
+    def div(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+
+        self.engine.div(
+            a, b, out,
+            self.ctx
+        )
+        return out
+
+    def pow(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+
+        self.engine.pow(
+            a, b, out,
+            self.ctx
+        )
+        return out
+
+    def mod(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out_shape = self._broadcast_shape(a.shape, b.shape)
+        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+
+        self.engine.mod(
+            a, b, out,
+            self.ctx
+        )
         return out
 
     def mul_scalar(self, x, scalar):
         x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape())
-        self.engine.mul_scalar(x, out, float(scalar), np.prod(x.shape()), self.ctx)
+        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        self.engine.mul_scalar(x, out, float(scalar), self.ctx)
         return out
 
     # =========================
-    # CNN算子
+    # NN 算子
     # =========================
+    def matmul(self, a, b, alpha=1.0, beta=0.0, transA=False, transB=False, C=None):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+
+        if len(a.shape) == 1:
+            a = self.unsqueeze(a, [0])  # [features] → [1, features]
+        if len(b.shape) == 1:
+            b = self.unsqueeze(b, [0])
+
+        batch_shape = a.shape[:-2]  # 前 N-2 维是 batch
+        M, K_a = a.shape[-2], a.shape[-1]
+        K_b, N = b.shape[-2], b.shape[-1]
+
+        # 校验矩阵维度
+        if transA:
+            M, K_a = K_a, M
+        if transB:
+            K_b, N = N, K_b
+        assert K_a == K_b, f"Inner dimensions mismatch: {K_a} vs {K_b}"
+
+        # 输出 shape
+        out_shape = batch_shape + (M, N)
+        out = dcu.DCUTensor(out_shape, dtype=a.dtype)
+
+        self.engine.matmul(a, b, out, transA, transB, alpha, beta, self.ctx)
+
+        # C 不为空，累加
+        if C is not None:
+            C = self._to_dcu_tensor(C)
+            out = self.add(out, self.mul_scalar(C, beta))
+
+        return out
+
     def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1):
         x = self._to_dcu_tensor(x)
         w = self._to_dcu_tensor(w, cache=True, cache_key=id(w))
-        N, C, H, W = x.shape()
-        K, _, R, S = w.shape()
+        N, C, H, W = x.shape
+        K, _, R, S = w.shape
         stride_h, stride_w = stride
         pad_h, pad_w = padding
         dilation_h, dilation_w = dilation
@@ -145,7 +211,7 @@ class DcuAdapter(BackendAdapter):
         Ho = (H + 2 * pad_h - dilation_h * (R - 1) - 1) // stride_h + 1
         Wo = (W + 2 * pad_w - dilation_w * (S - 1) - 1) // stride_w + 1
 
-        out = dcu.DCUTensor([N, K, Ho, Wo])
+        out = dcu.DCUTensor([N, K, Ho, Wo], dtype=x.dtype)
         self.engine.conv2d(x, w, out,
                            N, C, H, W,
                            K, R, S,
@@ -158,16 +224,40 @@ class DcuAdapter(BackendAdapter):
         if b is not None:
             # 保留 NCHW 维度，bias shape [K] → [1,K,1,1]
             self.engine.add_broadcast_nd(out, self._to_dcu_tensor(b), out,
-                                         out.shape(), [1, K, 1, 1], self.ctx)
+                                         out.shape, [1, K, 1, 1], self.ctx)
 
         return out
 
+    # =========================
+    # 激活算子
+    # =========================
+    def relu(self, x):
+        x = self._to_dcu_tensor(x)
+        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        self.engine.relu(x, out, self.ctx)
+        return out
+
+    def erf(self, x):
+        x = self._to_dcu_tensor(x)
+        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        self.engine.erf(x, out, self.ctx)
+        return out
+
+    def sqrt(self, x):
+        x = self._to_dcu_tensor(x)
+        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        self.engine.sqrt(x, out, self.ctx)
+        return out
+
+    # =========================
+    # 池化算子
+    # =========================
     def max_pool2d(self, x, kernel_size, stride, padding):
         x = self._to_dcu_tensor(x)
-        N, C, H, W = x.shape()
+        N, C, H, W = x.shape
         outH = (H + 2*padding[0] - kernel_size[0]) // stride[0] + 1
         outW = (W + 2*padding[1] - kernel_size[1]) // stride[1] + 1
-        out = dcu.DCUTensor([N, C, outH, outW])
+        out = dcu.DCUTensor([N, C, outH, outW], dtype=x.dtype)
         self.engine.max_pool2d(x, out,
                                N, C, H, W,
                                kernel_size[0], kernel_size[1],
@@ -178,18 +268,9 @@ class DcuAdapter(BackendAdapter):
 
     def global_avg_pool(self, x):
         x = self._to_dcu_tensor(x)
-        N, C, H, W = x.shape()
-        out = dcu.DCUTensor([N, C, 1, 1])  # 保留 1x1 输出维度
+        N, C, H, W = x.shape
+        out = dcu.DCUTensor([N, C, 1, 1], dtype=x.dtype)  # 保留 1x1 输出维度
         self.engine.global_avg_pool(x, out, N, C, H, W, self.ctx)
-        return out
-
-    def flatten(self, x, axis=1):
-        x = self._to_dcu_tensor(x)
-        shape = x.shape()
-        outer = np.prod(shape[:axis])
-        inner = np.prod(shape[axis:])
-        out = dcu.DCUTensor([outer, inner])
-        self.engine.flatten(x, out, outer, inner, self.ctx)
         return out
 
     # =========================
@@ -202,8 +283,8 @@ class DcuAdapter(BackendAdapter):
         running_mean = self._to_dcu_tensor(running_mean, cache=True, cache_key=id(running_mean))
         running_var = self._to_dcu_tensor(running_var, cache=True, cache_key=id(running_var))
 
-        out = dcu.DCUTensor(x.shape())
-        N, C, H, W = x.shape()
+        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        N, C, H, W = x.shape
         self.engine.batch_norm_2d(x, out,
                                   weight, bias,
                                   running_mean, running_var,
@@ -211,6 +292,43 @@ class DcuAdapter(BackendAdapter):
                                   eps, self.ctx)
         return out
 
-    def debug_tensor(t, name):
-        if isinstance(t, dcu.DCUTensor):
-            print(f"[DCU] {name}: shape={t.shape()}")
+    # =========================
+    # shape view
+    # =========================
+    def transpose(self, x, perm):
+        x = self._to_dcu_tensor(x)
+        out = self.engine.transpose(x, perm, self.ctx)
+        return out
+
+    def unsqueeze(self, x, axes):
+        x = self._to_dcu_tensor(x)
+        return self.engine.unsqueeze(x, list(axes), self.ctx)
+
+    def reshape(self, x, shape):
+        x = self._to_dcu_tensor(x)
+        return self.engine.reshape(x, shape, self.ctx)
+
+    # =========================
+    # transform
+    # =========================
+    def flatten(self, x, axis=1):
+        x = self._to_dcu_tensor(x)
+        shape = x.shape
+        ndim = x.ndim
+        if axis < 0:
+            axis += ndim
+        if axis < 0 or axis > ndim:
+            raise ValueError(f"flatten: axis out of range {axis} for shape {shape}")
+
+        # 计算输出 shape
+        outer = int(np.prod(shape[:axis], dtype=np.int64))
+        inner = int(np.prod(shape[axis:], dtype=np.int64))
+        out_shape = [outer, inner]
+
+        out = dcu.DCUTensor(out_shape, dtype=x.dtype)
+        self.engine.flatten(x, out, axis, self.ctx)
+        return out
+
+    def concat(self, xs, axis):
+        dcu_tensors = [self._to_dcu_tensor(x) for x in xs]
+        return self.engine.concat(dcu_tensors, axis, self.ctx)

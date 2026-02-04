@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument("--model", type=str, default="resnet18",
                         choices=["resnet18", "resnet50", "vit_b_16"], help="model architecture")
     parser.add_argument("--num_classes", type=int, default=10, help="model output classes")
-    parser.add_argument("--device", type=str, default="cuda", help="choose device to eval model")
+    parser.add_argument("--device", type=str, default="cpu", help="choose device to eval model")
     parser.add_argument("--seed", type=int, default=2026, help="random seed for np and torch")
     parser.add_argument("--batch_size", type=int, default=1, help="batch size for test")
     model_args = parser.parse_args()
@@ -43,13 +43,17 @@ if __name__ == "__main__":
     with trace_block_emit("Creating wrapper", model=args.model, backend=args.device):
         model = ONNXModelWrapper(
             base_model,
-            input_shape,
+            torch.randn(*input_shape),
             backend=args.device
         )
     x = torch.randn(args.batch_size, 3, 224, 224)
 
     with trace_block_emit("Total evaluation", model=args.model, backend=args.device):
         out = model(x)
+
+    print("eval finish! out info:")
+    print("shape:", out.shape)
+    print("mean:", out.mean(), "max:", out.max(), "min:", out.min())
 
     performance_dir = ProjectConfig.gui_dir() / "performance"
     performance_dir.mkdir(parents=True, exist_ok=True)
@@ -60,8 +64,5 @@ if __name__ == "__main__":
     batch_dir = model_dir / f"batch_size_{args.batch_size}"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    print("eval finish! out info:")
-    print("shape:", out.shape)
-    print("mean:", out.mean(), "max:", out.max(), "min:", out.min())
     save_path = batch_dir / f"{args.device}.npy"
     np.save(save_path, out)

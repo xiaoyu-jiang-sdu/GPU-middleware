@@ -65,26 +65,49 @@ class CudaAdapter(BackendAdapter):
         b = self._to_device(b)
         return a + b
 
-    def matmul(self, a, b):
+    def sub(self, a, b):
         a = self._to_device(a)
         b = self._to_device(b)
-        return torch.matmul(a, b)
+        return torch.sub(a, b)
+
+    def mul(self, a, b):
+        a = self._to_device(a)
+        b = self._to_device(b)
+        return torch.mul(a, b)
+
+    def div(self, a, b):
+        a = self._to_device(a)
+        b = self._to_device(b)
+        return torch.div(a, b)
+
+    def pow(self, a, b):
+        a = self._to_device(a)
+        b = self._to_device(b)
+        return torch.pow(a, b)
+
+    def mod(self, a, b):
+        a = self._to_device(a)
+        b = self._to_device(b)
+        return torch.remainder(a, b)
 
     def mul_scalar(self, x, scalar: float):
         x = self._to_device(x)
         return x * scalar
 
-    def transpose(self, x):
-        x = self._to_device(x)
-        return x.t()
-
-    def relu(self, x):
-        x = self._to_device(x)
-        return torch.relu(x)
-
     # =========================
-    # CNN算子
+    # NN 算子
     # =========================
+    def matmul(self, a, b, alpha=1.0, beta=0.0, transA=False, transB=False, C=None):
+        a = self._to_device(a)
+        b = self._to_device(b)
+
+        out = torch.matmul(a.transpose(-2, -1) if transA else a,
+                           b.transpose(-2, -1) if transB else b)
+        out = alpha * out
+        if C is not None:
+            out += beta * self.tensor(C)
+        return out
+
     def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0)):
         x = self._to_device(x)
         w = self._to_device(w, cache=True, cache_key=id(w))
@@ -98,6 +121,24 @@ class CudaAdapter(BackendAdapter):
             padding=padding
         )
 
+    # =========================
+    # 激活算子
+    # =========================
+    def relu(self, x):
+        x = self._to_device(x)
+        return torch.relu(x)
+
+    def erf(self, x):
+        x = self._to_device(x)
+        return torch.erf(x)
+
+    def sqrt(self, x):
+        x = self._to_device(x)
+        return torch.sqrt(x)
+
+    # =========================
+    # 池化算子
+    # =========================
     def max_pool2d(self, x, kernel_size, stride, padding):
         x = self._to_device(x)
         return torch.nn.functional.max_pool2d(
@@ -110,12 +151,6 @@ class CudaAdapter(BackendAdapter):
     def global_avg_pool(self, x):
         x = self._to_device(x)
         return torch.mean(x, dim=(2, 3), keepdim=True)
-
-    def flatten(self, x, axis: int = 1):
-        x = self._to_device(x)
-        shape = x.shape
-        new_shape = shape[:axis] + (-1,)
-        return x.view(new_shape)
 
     # =========================
     # 归一化
@@ -139,3 +174,55 @@ class CudaAdapter(BackendAdapter):
         y = y * weight + bias
 
         return y
+
+    # =========================
+    # shape view
+    # =========================
+    def transpose(self, x, perm):
+        x = self._to_device(x)
+        return x.permute(*perm)
+
+    def unsqueeze(self, x, axes):
+        x = self._to_device(x)
+        axes = sorted(axes)
+        in_shape = list(x.shape)
+        out_rank = len(in_shape) + len(axes)
+        out_shape = []
+
+        in_i = 0
+        axes_set = set(axes)
+        for i in range(out_rank):
+            if i in axes_set:
+                out_shape.append(1)
+            else:
+                out_shape.append(in_shape[in_i])
+                in_i += 1
+        return x.view(*out_shape)
+
+    def reshape(self, x, shape):
+        if isinstance(shape, torch.Tensor):
+            shape = shape.tolist()
+        in_shape = list(x.shape)
+
+        x = self._to_device(x)
+        new_shape = []
+        for i, s in enumerate(shape):
+            if s == 0:
+                new_shape.append(in_shape[i])
+            else:
+                new_shape.append(s)
+
+        return x.reshape(new_shape)
+
+    # =========================
+    # transform
+    # =========================
+    def flatten(self, x, axis: int = 1):
+        x = self._to_device(x)
+        shape = x.shape
+        new_shape = shape[:axis] + (-1,)
+        return x.view(new_shape)
+
+    def concat(self, xs, axis):
+        xs = self._to_device(xs)
+        return torch.cat(xs, dim=axis)

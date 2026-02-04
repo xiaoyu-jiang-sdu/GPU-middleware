@@ -1,258 +1,140 @@
 #include "dcu_engine.h"
 #include "dcu_common.h"
+#include "device_array.h"
+#include "dtype.h"
+#include "dcu_op_kernel.h"
+#include "dispatch/miopen_traits.h"
 #include <miopen/miopen.h>
-#include <rocblas/rocblas.h>
 #include <hip/hip_runtime.h>
-#include <ctime>
 #include <cstdlib>
-#include <iostream>
 
 namespace dcu {
 // ------------------------
-// 全局kernel函数
+// 返回连续tensor的shared_ptr
 // ------------------------
-__global__ void relu_kernel(float* x, float* o, int n) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) o[i] = x[i] > 0 ? x[i] : 0;
-    return;
-}
-
-__global__ void mul_scalar_kernel(float* x, float* o, float s, int n) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) o[i] = x[i] * s;
-    return;
-}
-
-__global__ void transpose_kernel(float* x, float* y,
-                                 int rows, int cols) {
-    int r = blockIdx.y * blockDim.y + threadIdx.y;
-    int c = blockIdx.x * blockDim.x + threadIdx.x;
-    if (r < rows && c < cols) {
-        y[c * rows + r] = x[r * cols + c];
-    }
-    return;
-}
-
-__global__ void add_broadcast_nd_kernel(
-    const float* __restrict__ a,
-    const float* __restrict__ b,
-    float* __restrict__ out,
-    const int* __restrict__ out_shape,
-    const int* __restrict__ a_shape,
-    const int* __restrict__ b_shape,
-    const int* __restrict__ a_strides,
-    const int* __restrict__ b_strides,
-    int ndim,
-    int total)
+std::shared_ptr<DCUTensor> DCUEngine::to_contiguous(
+    const std::shared_ptr<DCUTensor>& x, DCUContext* ctx)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= total) return;
-
-    int tmp = idx;
-    int a_idx = 0;
-    int b_idx = 0;
-
-    for (int d = ndim - 1; d >= 0; --d) {
-        int coord = tmp % out_shape[d];
-        tmp /= out_shape[d];
-
-        int a_coord = (a_shape[d] == 1) ? 0 : coord;
-        int b_coord = (b_shape[d] == 1) ? 0 : coord;
-
-        a_idx += a_coord * a_strides[d];
-        b_idx += b_coord * b_strides[d];
+    if (!x) {
+        throw std::runtime_error("to_contiguous: input is nullptr");
     }
 
-    out[idx] = a[a_idx] + b[b_idx];
+    // 已经连续，直接返回
+    if (x->is_contiguous()) {
+        return x;
+    }
+
+    // 创建新的 contiguous tensor
+    auto y = std::make_shared<DCUTensor>(x->shape(), x->dtype());
+    unary_op_impl<CopyOp>(x, y, ctx);
+    return y;
+}
+
+// 简化写法，确保某个张量连续，返回shared_ptr
+inline std::shared_ptr<DCUTensor>
+ensure_contiguous(DCUTensor* t, DCUContext* ctx)
+{
+    auto sp = std::shared_ptr<DCUTensor>(t, [](DCUTensor*) {});
+    return DCUEngine::to_contiguous(sp, ctx);
 }
 
 // ------------------------
-// add 实现，广播加法
+// 二元运算实现，广播Op
 // ------------------------
-
-static std::vector<int> compute_strides(const std::vector<int>& shape) {
-    int ndim = shape.size();
-    std::vector<int> strides(ndim, 1);
-    for (int i = ndim - 2; i >= 0; --i) {
-        strides[i] = strides[i + 1] * shape[i + 1];
-    }
-    return strides;
+void DCUEngine::add(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<AddOp>(a, b, out, ctx);
 }
 
-static std::vector<int> compute_broadcast_shape(
-    const std::vector<int>& a_shape,
-    const std::vector<int>& b_shape)
-{
-    int na = a_shape.size();
-    int nb = b_shape.size();
-    int ndim = std::max(na, nb);
-
-    std::vector<int> out_shape(ndim, 1);
-
-    for (int i = 0; i < ndim; ++i) {
-        int da = (i < ndim - na) ? 1 : a_shape[i - (ndim - na)];
-        int db = (i < ndim - nb) ? 1 : b_shape[i - (ndim - nb)];
-
-        if (da == db || da == 1 || db == 1) {
-            out_shape[i] = std::max(da, db);
-        } else {
-            throw std::runtime_error("Invalid broadcast shapes");
-        }
-    }
-    return out_shape;
+void DCUEngine::sub(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<SubOp>(a, b, out, ctx);
 }
 
-void DCUEngine::add(
-    DCUTensor* a,
-    DCUTensor* b,
-    DCUTensor* out,
-    const std::vector<int>& a_shape,
-    const std::vector<int>& b_shape,
-    DCUContext* ctx)
+void DCUEngine::mul(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<MulOp>(a, b, out, ctx);
+}
+
+void DCUEngine::div(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<DivOp>(a, b, out, ctx);
+}
+
+void DCUEngine::pow(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<PowOp>(a, b, out, ctx);
+}
+
+void DCUEngine::mod(DCUTensor* a, DCUTensor* b,
+                    DCUTensor* out, DCUContext* ctx) {
+    binary_op_impl<ModOp>(a, b, out, ctx);
+}
+
+// ------------------------
+// mul_scalar 实现
+// ------------------------
+void DCUEngine::mul_scalar(DCUTensor* x, DCUTensor* o, float s, DCUContext* ctx)
 {
-    // out_shape
-    std::vector<int> out_shape = compute_broadcast_shape(a_shape, b_shape);
-    int ndim = out_shape.size();
-
-    // 元素总数
-    int total = 1;
-    for (int d : out_shape) total *= d;
-
-    if (total == 0) return;
-
-    // strides
-    std::vector<int> a_shape_aligned(ndim, 1);
-    std::vector<int> b_shape_aligned(ndim, 1);
-
-    // 右对齐
-    std::copy(a_shape.begin(), a_shape.end(),
-              a_shape_aligned.begin() + (ndim - a_shape.size()));
-    std::copy(b_shape.begin(), b_shape.end(),
-              b_shape_aligned.begin() + (ndim - b_shape.size()));
-
-    auto a_strides = compute_strides(a_shape_aligned);
-    auto b_strides = compute_strides(b_shape_aligned);
-
-    int *d_out_shape = nullptr;
-    int *d_a_shape = nullptr;
-    int *d_b_shape = nullptr;
-    int *d_a_strides = nullptr;
-    int *d_b_strides = nullptr;
-
-    CHECK_HIP(hipMalloc(&d_out_shape, ndim * sizeof(int)));
-    CHECK_HIP(hipMalloc(&d_a_shape, ndim * sizeof(int)));
-    CHECK_HIP(hipMalloc(&d_b_shape, ndim * sizeof(int)));
-    CHECK_HIP(hipMalloc(&d_a_strides, ndim * sizeof(int)));
-    CHECK_HIP(hipMalloc(&d_b_strides, ndim * sizeof(int)));
-
-    CHECK_HIP(hipMemcpyAsync(d_out_shape, out_shape.data(),
-                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
-    CHECK_HIP(hipMemcpyAsync(d_a_shape, a_shape_aligned.data(),
-                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
-    CHECK_HIP(hipMemcpyAsync(d_b_shape, b_shape_aligned.data(),
-                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
-    CHECK_HIP(hipMemcpyAsync(d_a_strides, a_strides.data(),
-                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
-    CHECK_HIP(hipMemcpyAsync(d_b_strides, b_strides.data(),
-                             ndim * sizeof(int), hipMemcpyHostToDevice, ctx->get_stream()));
-
-    // launch kernel
-    constexpr int BLOCK = 256;
-    int GRID = (total + BLOCK - 1) / BLOCK;
-
-    hipLaunchKernelGGL(
-        add_broadcast_nd_kernel,
-        dim3(GRID), dim3(BLOCK), 0, ctx->get_stream(),
-        static_cast<const float*>(a->data()),
-        static_cast<const float*>(b->data()),
-        static_cast<float*>(out->data()),
-        d_out_shape,
-        d_a_shape,
-        d_b_shape,
-        d_a_strides,
-        d_b_strides,
-        ndim,
-        total
+    unary_scalar_op_impl<MulScalarOp>(
+        x, o, s, ctx
     );
-
-    CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
-
-    hipFree(d_out_shape);
-    hipFree(d_a_shape);
-    hipFree(d_b_shape);
-    hipFree(d_a_strides);
-    hipFree(d_b_strides);
 }
-
-
 
 // ------------------------
 // matmul 实现
 // ------------------------
 void DCUEngine::matmul(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
-                       int M, int N, int K,
+                       bool transA, bool transB,
+                       float alpha, float beta,
                        DCUContext* ctx)
 {
-    float alpha = 1.0f, beta = 0.0f;
+    // 确保连续
+    auto A_sp = ensure_contiguous(A, ctx);
+    auto B_sp = ensure_contiguous(B, ctx);
 
-
-    rocblas_status status = rocblas_sgemm(
-        ctx->get_rocblas(),
-        rocblas_operation_none,
-        rocblas_operation_none,
-        N,
-        M,
-        K,
-        &alpha,
-        static_cast<const float*>(B->data()),
-        N,
-        static_cast<const float*>(A->data()),
-        K,
-        &beta,
-        static_cast<float*>(Out->data()),
-        N
-    );
-    if (status != rocblas_status_success) {
-        std::cerr << "[rocBLAS][sgemm] failed, status = "
-                  << status << std::endl;
-    }
-
-
+    // dispatch到不同类型的matmul 模板上执行
+    DISPATCH_FLOAT_ONLY(A->dtype(), ([&](auto dtype_enum){
+        using T = typename engine::CType<decltype(dtype_enum)::value>::type;
+        matmul_template<T>(
+            A_sp.get(),
+            B_sp.get(),
+            Out,
+            transA,
+            transB,
+            alpha,
+            beta,
+            ctx
+        );
+    }));
 }
 // ------------------------
 // Relu 实现
 // ------------------------
-void DCUEngine::relu(DCUTensor* x, DCUTensor* o, int n, DCUContext*) {
-    hipLaunchKernelGGL(relu_kernel,
-        dim3((n + 255) / 256), dim3(256), 0, 0,
-        (float*)x->data(), (float*)o->data(), n);
+void DCUEngine::relu(DCUTensor* x, DCUTensor* o, DCUContext* ctx) {
+    unary_op_impl<ReluOp>(
+        x, o, ctx
+    );
 }
+
 // ------------------------
-// transpose 实现
+// Erf 实现
 // ------------------------
-void DCUEngine::transpose(DCUTensor* x, DCUTensor* y,
-                          int rows, int cols,
-                          DCUContext*) {
-    dim3 block(16, 16);
-    dim3 grid((cols + 15) / 16, (rows + 15) / 16);
-    hipLaunchKernelGGL(transpose_kernel,
-        grid, block, 0, 0,
-        static_cast<float*>(x->data()),
-        static_cast<float*>(y->data()),
-        rows, cols);
+void DCUEngine::erf(DCUTensor* x, DCUTensor* o, DCUContext* ctx) {
+    unary_op_impl<ErfOp>(
+        x, o, ctx
+    );
 }
+
 // ------------------------
-// mul_scalar 实现
+// Sqrt 实现
 // ------------------------
-void DCUEngine::mul_scalar(DCUTensor* x, DCUTensor* o,
-                           float s, int n,
-                           DCUContext*) {
-    hipLaunchKernelGGL(mul_scalar_kernel,
-        dim3((n + 255) / 256), dim3(256), 0, 0,
-        static_cast<float*>(x->data()),
-        static_cast<float*>(o->data()),
-        s, n);
+void DCUEngine::sqrt(DCUTensor* x, DCUTensor* o, DCUContext* ctx) {
+    unary_op_impl<SqrtOp>(
+        x, o, ctx
+    );
 }
+
 // ------------------------
 // conv2d 实现
 // ------------------------
@@ -265,121 +147,136 @@ void DCUEngine::conv2d(DCUTensor* x, DCUTensor* w, DCUTensor* y,
                        int groups,
                        DCUContext* ctx)
 {
-    float* x_data = static_cast<float*>(x->data());
-    float* w_data = static_cast<float*>(w->data());
-    float* y_data = static_cast<float*>(y->data());
+    // 确保x与w连续
+    auto x_c = ensure_contiguous(x, ctx);
+    auto w_c = ensure_contiguous(w, ctx);
 
-    int Ho = (H + 2 * pad_h - dilation_h * (R - 1) - 1) / stride_h + 1;
-    int Wo = (W + 2 * pad_w - dilation_w * (S - 1) - 1) / stride_w + 1;
+    // x数据类型的大小
+    size_t d_size = dtype_size(x->dtype());
 
-    CHECK_HIP(hipMemset(y_data, 0, sizeof(float) * N * K * Ho * Wo));
+    // 只dispatch float32
+    DISPATCH_FLOAT_ONLY(x->dtype(), ([&](auto dtype_enum) {
+        using Traits = MiopenTraits<decltype(dtype_enum)::value>;
+        using T = typename Traits::CType;
 
-    // Tensor 描述符
-    miopenTensorDescriptor_t x_desc, w_desc, y_desc;
-    miopenCreateTensorDescriptor(&x_desc);
-    miopenCreateTensorDescriptor(&w_desc);
-    miopenCreateTensorDescriptor(&y_desc);
+        T* x_data = static_cast<T*>(x_c->data());
+        T* w_data = static_cast<T*>(w_c->data());
+        T* y_data = static_cast<T*>(y->data());
 
-    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
-    miopenSet4dTensorDescriptor(w_desc, miopenFloat, K, C / groups, R, S);
-    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, K, Ho, Wo);
+        int Ho = (H + 2 * pad_h - dilation_h * (R - 1) - 1) / stride_h + 1;
+        int Wo = (W + 2 * pad_w - dilation_w * (S - 1) - 1) / stride_w + 1;
 
-    // 卷积描述符
-    miopenConvolutionDescriptor_t conv_desc;
-    miopenCreateConvolutionDescriptor(&conv_desc);
-    miopenInitConvolutionDescriptor(conv_desc,
-                                    miopenConvolution,
-                                    pad_h, pad_w,
-                                    stride_h, stride_w,
-                                    dilation_h, dilation_w);
-    miopenSetConvolutionGroupCount(conv_desc, groups);
+        // y设置为0
+        CHECK_HIP(hipMemset(y_data, 0, d_size * N * K * Ho * Wo));
 
-    // 构造卷积 key
-    dcu::ConvKey key{N, C, H, W, K, R, S,
+        // Tensor 描述符
+        miopenTensorDescriptor_t x_desc, w_desc, y_desc;
+        miopenCreateTensorDescriptor(&x_desc);
+        miopenCreateTensorDescriptor(&w_desc);
+        miopenCreateTensorDescriptor(&y_desc);
+
+        // 动态dispatch miopen type
+        miopenSet4dTensorDescriptor(x_desc, Traits::miopen_type, N, C, H, W);
+        miopenSet4dTensorDescriptor(w_desc, Traits::miopen_type, K, C / groups, R, S);
+        miopenSet4dTensorDescriptor(y_desc, Traits::miopen_type, N, K, Ho, Wo);
+
+        // 卷积描述符
+        miopenConvolutionDescriptor_t conv_desc;
+        miopenCreateConvolutionDescriptor(&conv_desc);
+        miopenInitConvolutionDescriptor(conv_desc,
+                                        miopenConvolution,
+                                        pad_h, pad_w,
+                                        stride_h, stride_w,
+                                        dilation_h, dilation_w);
+        miopenSetConvolutionGroupCount(conv_desc, groups);
+
+        // 构造卷积 key
+        ConvKey key{N, C, H, W, K, R, S,
                      stride_h, stride_w,
                      pad_h, pad_w,
                      dilation_h, dilation_w,
                      groups};
 
-    miopenConvFwdAlgorithm_t algo;
-    size_t workspace_size = 0;
+        miopenConvFwdAlgorithm_t algo;
+        size_t workspace_size = 0;
 
-    // 查缓存
-    auto it = ctx->conv_algo_cache_.find(key);
-    if (it != ctx->conv_algo_cache_.end()) {
-        algo = it->second.algo;
-        workspace_size = it->second.workspace_size;
-    } else {
-        // 第一次查找最优算法
-        miopenConvAlgoPerf_t perfResults;
-        int returnedAlgoCount = 0;
+        // 查缓存
+        auto it = ctx->conv_algo_cache_.find(key);
+        if (it != ctx->conv_algo_cache_.end()) {
+            algo = it->second.algo;
+            workspace_size = it->second.workspace_size;
+        } else {
+            // 第一次查找最优算法
+            miopenConvAlgoPerf_t perfResults;
+            int returnedAlgoCount = 0;
 
-        // 获取可能的最大 workspace
-        size_t max_ws_size = 0;
-        miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
-                                                 x_desc, w_desc, conv_desc, y_desc, &max_ws_size);
+            // 获取可能的最大 workspace
+            size_t max_ws_size = 0;
+            miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
+                                                    x_desc, w_desc, conv_desc, y_desc, &max_ws_size);
 
-        // 如果 max_ws_size 为 0，强制设置一个保底值，避免 find 阶段警告
-        if (max_ws_size == 0) {
-            max_ws_size = 64ULL * 1024 * 1024;  // 64MB 保底
+            // 若max_ws_size 为 0，强制设置一个保底值，避免 find 阶段警告
+            if (max_ws_size == 0) {
+                max_ws_size = 64ULL * 1024 * 1024;  // 64MB 保底
+            }
+
+            void* workspace = nullptr;
+            if (max_ws_size > 0) CHECK_HIP(hipMalloc(&workspace, max_ws_size));
+
+            // 查找最优算法
+            miopenFindConvolutionForwardAlgorithm(ctx->get_miopen(),
+                                                x_desc, x_data,
+                                                w_desc, w_data,
+                                                conv_desc,
+                                                y_desc, y_data,
+                                                1, &returnedAlgoCount,
+                                                &perfResults,
+                                                workspace, max_ws_size,
+                                                false);
+
+            algo = perfResults.fwd_algo;
+            workspace_size = perfResults.memory;
+
+            // 重新查询实际最大 workspace
+            size_t real_ws = 0;
+            miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
+                                                    x_desc, w_desc, conv_desc, y_desc, &real_ws);
+            workspace_size = std::max(workspace_size, real_ws);
+            if (workspace_size == 0) {
+                workspace_size = 64ULL * 1024 * 1024;  // 如果仍为 0，设置保底
+            }
+
+            // 缓存算法
+            ctx->conv_algo_cache_[key] = {algo, workspace_size};
+
+            if (workspace) CHECK_HIP(hipFree(workspace));
         }
 
+        // 分配需要的 workspace 并执行卷积
         void* workspace = nullptr;
-        if (max_ws_size > 0) CHECK_HIP(hipMalloc(&workspace, max_ws_size));
-
-        // 查找最优算法
-        miopenFindConvolutionForwardAlgorithm(ctx->get_miopen(),
-                                              x_desc, x_data,
-                                              w_desc, w_data,
-                                              conv_desc,
-                                              y_desc, y_data,
-                                              1, &returnedAlgoCount,
-                                              &perfResults,
-                                              workspace, max_ws_size,
-                                              false);
-
-        algo = perfResults.fwd_algo;
-        workspace_size = perfResults.memory;
-
-        // 重新查询实际最大 workspace
-        size_t real_ws = 0;
-        miopenConvolutionForwardGetWorkSpaceSize(ctx->get_miopen(),
-                                                 x_desc, w_desc, conv_desc, y_desc, &real_ws);
-        workspace_size = std::max(workspace_size, real_ws);
-        if (workspace_size == 0) {
-            workspace_size = 64ULL * 1024 * 1024;  // 如果仍为 0，设置保底
+        if (workspace_size > 0) {
+            CHECK_HIP(hipMalloc(&workspace, workspace_size));
         }
 
-        // 缓存算法
-        ctx->conv_algo_cache_[key] = {algo, workspace_size};
+        float alpha = 1.0f, beta = 0.0f;
+        miopenConvolutionForward(ctx->get_miopen(),
+                                &alpha,
+                                x_desc, x_data,
+                                w_desc, w_data,
+                                conv_desc,
+                                algo,
+                                &beta,
+                                y_desc, y_data,
+                                workspace, workspace_size);
 
         if (workspace) CHECK_HIP(hipFree(workspace));
-    }
 
-    // 分配需要的 workspace 并执行卷积
-    void* workspace = nullptr;
-    if (workspace_size > 0) {
-        CHECK_HIP(hipMalloc(&workspace, workspace_size));
-    }
-
-    float alpha = 1.0f, beta = 0.0f;
-    miopenConvolutionForward(ctx->get_miopen(),
-                             &alpha,
-                             x_desc, x_data,
-                             w_desc, w_data,
-                             conv_desc,
-                             algo,
-                             &beta,
-                             y_desc, y_data,
-                             workspace, workspace_size);
-
-    if (workspace) CHECK_HIP(hipFree(workspace));
-
-    // 清理描述符
-    miopenDestroyTensorDescriptor(x_desc);
-    miopenDestroyTensorDescriptor(w_desc);
-    miopenDestroyTensorDescriptor(y_desc);
-    miopenDestroyConvolutionDescriptor(conv_desc);
+        // 清理描述符
+        miopenDestroyTensorDescriptor(x_desc);
+        miopenDestroyTensorDescriptor(w_desc);
+        miopenDestroyTensorDescriptor(y_desc);
+        miopenDestroyConvolutionDescriptor(conv_desc);
+    }));
 }
 // ------------------------
 // max_pool2d 实现
@@ -391,41 +288,49 @@ void DCUEngine::max_pool2d(DCUTensor* x, DCUTensor* y,
                                 int pH, int pW,
                                 DCUContext* ctx)
 {
-    miopenTensorDescriptor_t x_desc, y_desc;
-    miopenCreateTensorDescriptor(&x_desc);
-    miopenCreateTensorDescriptor(&y_desc);
+    auto x_c = ensure_contiguous(x, ctx);
 
-    int outH = (H + 2 * pH - kH) / sH + 1;
-    int outW = (W + 2 * pW - kW) / sW + 1;
+    // 只dispatch float32
+    DISPATCH_FLOAT_ONLY(x->dtype(), ([&](auto dtype_enum) {
+        using Traits = MiopenTraits<decltype(dtype_enum)::value>;
+        using T = typename Traits::CType;
 
-    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
-    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, outH, outW);
+        miopenTensorDescriptor_t x_desc, y_desc;
+        miopenCreateTensorDescriptor(&x_desc);
+        miopenCreateTensorDescriptor(&y_desc);
 
-    miopenPoolingDescriptor_t pool_desc;
-    miopenCreatePoolingDescriptor(&pool_desc);
-    miopenSet2dPoolingDescriptor(
-        pool_desc,
-        miopenPoolingMax,
-        kH, kW,
-        pH, pW,
-        sH, sW
-    );
+        int outH = (H + 2 * pH - kH) / sH + 1;
+        int outW = (W + 2 * pW - kW) / sW + 1;
 
-    float alpha = 1.0f, beta = 0.0f;
+        miopenSet4dTensorDescriptor(x_desc, Traits::miopen_type, N, C, H, W);
+        miopenSet4dTensorDescriptor(y_desc, Traits::miopen_type, N, C, outH, outW);
 
-    miopenPoolingForward(
-        ctx->get_miopen(),
-        pool_desc,
-        &alpha,
-        x_desc, x->data(),
-        &beta,
-        y_desc, y->data(),
-        false, nullptr, 0
-    );
+        miopenPoolingDescriptor_t pool_desc;
+        miopenCreatePoolingDescriptor(&pool_desc);
+        miopenSet2dPoolingDescriptor(
+            pool_desc,
+            miopenPoolingMax,
+            kH, kW,
+            pH, pW,
+            sH, sW
+        );
 
-    miopenDestroyPoolingDescriptor(pool_desc);
-    miopenDestroyTensorDescriptor(x_desc);
-    miopenDestroyTensorDescriptor(y_desc);
+        float alpha = 1.0f, beta = 0.0f;
+
+        miopenPoolingForward(
+            ctx->get_miopen(),
+            pool_desc,
+            &alpha,
+            x_desc, x_c->data(),
+            &beta,
+            y_desc, y->data(),
+            false, nullptr, 0
+        );
+
+        miopenDestroyPoolingDescriptor(pool_desc);
+        miopenDestroyTensorDescriptor(x_desc);
+        miopenDestroyTensorDescriptor(y_desc);
+    }));
 }
 
 // ------------------------
@@ -436,50 +341,49 @@ void DCUEngine::global_avg_pool(
     int N, int C, int H, int W,
     DCUContext* ctx)
 {
-    // 1. 创建 tensor 描述符
-    miopenTensorDescriptor_t x_desc, y_desc;
-    miopenCreateTensorDescriptor(&x_desc);
-    miopenCreateTensorDescriptor(&y_desc);
+    auto x_c = ensure_contiguous(x, ctx);
 
-    // 输入: NCHW
-    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
+    // 只dispatch float32
+    DISPATCH_FLOAT_ONLY(x->dtype(), ([&](auto dtype_enum) {
+        using Traits = MiopenTraits<decltype(dtype_enum)::value>;
+        using T = typename Traits::CType;
 
-    // 输出: N x C x 1 x 1
-    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, 1, 1);
+        miopenTensorDescriptor_t x_desc, y_desc;
+        miopenCreateTensorDescriptor(&x_desc);
+        miopenCreateTensorDescriptor(&y_desc);
 
-    // 2. 创建池化描述符
-    miopenPoolingDescriptor_t pool_desc;
-    miopenCreatePoolingDescriptor(&pool_desc);
+        miopenSet4dTensorDescriptor(x_desc, Traits::miopen_type, N, C, H, W);
+        miopenSet4dTensorDescriptor(y_desc, Traits::miopen_type, N, C, 1, 1);
 
-    // 全局平均池化: kernel size = H x W, stride=1, padding=0
-    miopenSet2dPoolingDescriptor(
-        pool_desc,
-        miopenPoolingAverage,
-        H, W,      // kernel
-        0, 0,      // padding
-        1, 1      // stride
-    );
+        miopenPoolingDescriptor_t pool_desc;
+        miopenCreatePoolingDescriptor(&pool_desc);
 
-    float alpha = 1.0f;
-    float beta = 0.0f;
+        miopenSet2dPoolingDescriptor(
+            pool_desc,
+            miopenPoolingAverage,
+            H, W,
+            0, 0,
+            1, 1
+        );
 
-    // 3. 调用 MIOpen 池化前向
-    miopenPoolingForward(
-        ctx->get_miopen(),
-        pool_desc,
-        &alpha,
-        x_desc, x->data(),
-        &beta,
-        y_desc, y->data(),
-        false,     // do_backward = false
-        nullptr,   // workspace
-        0          // workspace size
-    );
+        float alpha = 1.0f;
+        float beta = 0.0f;
 
-    // 4. 清理描述符
-    miopenDestroyPoolingDescriptor(pool_desc);
-    miopenDestroyTensorDescriptor(x_desc);
-    miopenDestroyTensorDescriptor(y_desc);
+        miopenPoolingForward(
+            ctx->get_miopen(),
+            pool_desc,
+            &alpha,
+            x_desc, x_c->data(),
+            &beta,
+            y_desc, y->data(),
+            false,
+            nullptr,
+            0
+        );
+        miopenDestroyPoolingDescriptor(pool_desc);
+        miopenDestroyTensorDescriptor(x_desc);
+        miopenDestroyTensorDescriptor(y_desc);
+    }));
 }
 
 
@@ -488,10 +392,25 @@ void DCUEngine::global_avg_pool(
 // flatten 实现
 // ------------------------
 void DCUEngine::flatten(DCUTensor* x, DCUTensor* y,
-                        int outer, int inner, DCUContext*) {
-    CHECK_HIP(hipMemcpy(y->data(), x->data(),
-                sizeof(float) * outer * inner,
-                hipMemcpyDeviceToDevice));
+                        int axis, DCUContext* ctx) {
+    auto x_c = ensure_contiguous(x, ctx);
+    int ndim = x->ndim();
+
+    int outer = 1;
+    for (int i = 0; i < axis; ++i) outer *= x->shape()[i];
+
+    int inner = 1;
+    for (int i = axis; i < ndim; ++i) inner *= x->shape()[i];
+
+    size_t d_size = dtype_size(x->dtype());
+
+    DISPATCH_DTYPE(x->dtype(), ([&](auto dtype_enum){
+        using T = typename engine::CType<decltype(dtype_enum)::value>::type;
+
+        CHECK_HIP(hipMemcpy(y->data(), x_c->data(),
+            d_size * outer * inner,
+            hipMemcpyDeviceToDevice));
+    }));
 }
 
 // ------------------------
@@ -504,34 +423,304 @@ void DCUEngine::batch_norm_2d(
     int N, int C, int H, int W,
     float eps,
     DCUContext* ctx) {
+    auto x_c = ensure_contiguous(x, ctx);
 
-    miopenTensorDescriptor_t x_desc, y_desc, bn_desc;
-    miopenCreateTensorDescriptor(&x_desc);
-    miopenCreateTensorDescriptor(&y_desc);
-    miopenCreateTensorDescriptor(&bn_desc);
+    // 只dispatch float32
+    DISPATCH_FLOAT_ONLY(x->dtype(), ([&](auto dtype_enum) {
+        using Traits = MiopenTraits<decltype(dtype_enum)::value>;
+        using T = typename Traits::CType;
 
-    miopenSet4dTensorDescriptor(x_desc, miopenFloat, N, C, H, W);
-    miopenSet4dTensorDescriptor(y_desc, miopenFloat, N, C, H, W);
-    miopenDeriveBNTensorDescriptor(bn_desc, x_desc, miopenBNSpatial);
+        miopenTensorDescriptor_t x_desc, y_desc, bn_desc;
+        miopenCreateTensorDescriptor(&x_desc);
+        miopenCreateTensorDescriptor(&y_desc);
+        miopenCreateTensorDescriptor(&bn_desc);
 
-    float alpha = 1.0f, beta = 0.0f;
+        miopenSet4dTensorDescriptor(x_desc, Traits::miopen_type, N, C, H, W);
+        miopenSet4dTensorDescriptor(y_desc, Traits::miopen_type, N, C, H, W);
+        miopenDeriveBNTensorDescriptor(bn_desc, x_desc, miopenBNSpatial);
 
-    miopenBatchNormalizationForwardInference(
-        ctx->get_miopen(),
-        miopenBNSpatial,
-        &alpha, &beta,
-        x_desc, x->data(),
-        y_desc, y->data(),
-        bn_desc,
-        weight->data(),
-        bias->data(),
-        running_mean->data(),
-        running_var->data(),
-        eps
+        float alpha = 1.0f, beta = 0.0f;
+
+        miopenBatchNormalizationForwardInference(
+            ctx->get_miopen(),
+            miopenBNSpatial,
+            &alpha, &beta,
+            x_desc, x_c->data(),
+            y_desc, y->data(),
+            bn_desc,
+            weight->data(),
+            bias->data(),
+            running_mean->data(),
+            running_var->data(),
+            eps
+        );
+
+        miopenDestroyTensorDescriptor(x_desc);
+        miopenDestroyTensorDescriptor(y_desc);
+        miopenDestroyTensorDescriptor(bn_desc);
+    }));
+}
+
+// ------------------------
+// transpose 实现
+// ------------------------
+std::shared_ptr<DCUTensor> DCUEngine::transpose(std::shared_ptr<DCUTensor> x,
+                                const std::vector<int>& perm,
+                                DCUContext* ctx)
+{
+    if (!x) throw std::runtime_error("transpose: input tensor is nullptr");
+
+    int ndim = x->ndim();
+    if ((int)perm.size() != ndim)
+        throw std::runtime_error("transpose: perm rank mismatch");
+
+    std::vector<int> new_shape(ndim);
+    std::vector<int> new_strides(ndim);
+
+    const auto& old_shape = x->shape();
+    const auto& old_strides = x->strides();
+
+    // 重新计算 strides，保证 view 展开顺序正确
+    for (int i = 0; i < ndim; ++i) {
+        new_shape[i] = old_shape[perm[i]];
+        new_strides[i] = old_strides[perm[i]];
+    }
+
+    // 创建 view
+    auto view = std::make_shared<DCUTensor>(
+        x->data(),
+        new_shape,
+        new_strides,
+        x->dtype(),
+        false,
+        x
     );
 
-    miopenDestroyTensorDescriptor(x_desc);
-    miopenDestroyTensorDescriptor(y_desc);
-    miopenDestroyTensorDescriptor(bn_desc);
+    return view;
+}
+
+
+// ------------------------
+// unsqueeze 实现
+// ------------------------
+std::shared_ptr<DCUTensor> DCUEngine::unsqueeze(
+    std::shared_ptr<DCUTensor> x,
+    const std::vector<int>& axes,
+    DCUContext* ctx)
+{
+    if (!x) throw std::runtime_error("unsqueeze: input tensor is nullptr");
+
+    const auto& in_shape = x->shape();
+    const auto& in_strides = x->strides();
+    int ndim = x->ndim();
+
+    std::vector<int> norm_axes;
+    norm_axes.reserve(axes.size());
+    for (int a : axes) {
+        int axis = a < 0 ? a + ndim + 1 : a;
+        if (axis < 0 || axis > ndim)
+            throw std::runtime_error("unsqueeze: axis out of range");
+        norm_axes.push_back(axis);
+    }
+    std::sort(norm_axes.begin(), norm_axes.end());
+
+    // 新 shape
+    std::vector<int> new_shape = in_shape;
+    for (int axis : norm_axes) {
+        new_shape.insert(new_shape.begin() + axis, 1);
+    }
+
+    // 新 strides
+    std::vector<int> new_strides;
+    new_strides.reserve(new_shape.size());
+    int j = 0;
+    for (int i = 0; i < new_shape.size(); ++i) {
+        if (j < norm_axes.size() && i == norm_axes[j]) {
+            new_strides.push_back(0); // unsqueeze 新维度 stride = 0
+            j++;
+        } else {
+            new_strides.push_back(in_strides[i - j]);
+        }
+    }
+
+    // 创建零拷贝 view tensor
+    auto view = std::make_shared<DCUTensor>(
+        x->data(),
+        new_shape,
+        new_strides,
+        x->dtype(),
+        false,
+        x
+    );
+
+    return view;
+}
+
+// ------------------------
+// reshape 实现
+// ------------------------
+std::shared_ptr<DCUTensor> DCUEngine::reshape(
+    std::shared_ptr<DCUTensor> x,
+    const std::vector<int>& shape,
+    DCUContext* ctx)
+{
+    if (!x)
+        throw std::runtime_error("reshape: input tensor is nullptr");
+
+    const auto& in_shape   = x->shape();
+    const auto& in_strides = x->strides();
+    int in_ndim = x->ndim();
+
+    std::vector<int> new_shape;
+    new_shape.reserve(shape.size());
+
+    int infer_axis = -1;
+    int known_product = 1;
+
+    for (int i = 0; i < shape.size(); ++i) {
+        int s = shape[i];
+
+        if (s == 0) {
+            if (i >= in_ndim)
+                throw std::runtime_error("reshape: 0-dim out of range");
+            s = in_shape[i];
+        }
+
+        if (s == -1) {
+            if (infer_axis != -1)
+                throw std::runtime_error("reshape: multiple -1 not allowed");
+            infer_axis = i;
+            new_shape.push_back(1);
+        } else {
+            new_shape.push_back(s);
+            known_product *= s;
+        }
+    }
+
+    int total = x->size();
+    if (infer_axis != -1) {
+        if (total % known_product != 0)
+            throw std::runtime_error("reshape: invalid -1 inference");
+        new_shape[infer_axis] = total / known_product;
+    }
+    bool contiguous = x->is_contiguous();
+
+    std::shared_ptr<DCUTensor> base = x;
+
+    if (!contiguous) {
+        base = to_contiguous(x, ctx);
+    }
+
+    std::vector<int> new_strides(new_shape.size());
+    int stride = 1;
+    for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
+        new_strides[i] = stride;
+        stride *= new_shape[i];
+    }
+
+    auto view = std::make_shared<DCUTensor>(
+        base->data(),
+        new_shape,
+        new_strides,
+        x->dtype(),
+        false,
+        base
+    );
+
+    return view;
+}
+
+
+// ------------------------
+// concat 实现
+// ------------------------
+static int prod(const std::vector<int>& v, int start, int end) {
+    int r = 1;
+    for (int i = start; i < end; ++i) r *= v[i];
+    return r;
+}
+
+DCUTensor* DCUEngine::concat(
+    const std::vector<DCUTensor*>& inputs,
+    int axis,
+    DCUContext* ctx
+) {
+    if (inputs.empty())
+        throw std::runtime_error("concat: empty inputs");
+
+    int ndim = inputs[0]->ndim();
+    if (axis < 0) axis += ndim;
+    if (axis < 0 || axis >= ndim)
+        throw std::runtime_error("concat: axis out of range");
+
+    std::vector<std::shared_ptr<DCUTensor>> owned_buffers;
+    std::vector<DCUTensor*> tensors;
+    tensors.reserve(inputs.size());
+
+    for (auto* t : inputs) {
+        if (!t)
+            throw std::runtime_error("concat: nullptr input");
+
+        if ((int)t->shape().size() != ndim)
+            throw std::runtime_error("concat: rank mismatch");
+
+        if (!t->is_contiguous()) {
+            auto contig = ensure_contiguous(t, ctx);
+            owned_buffers.push_back(contig);
+            tensors.push_back(contig.get());
+        } else {
+            tensors.push_back(t);
+        }
+    }
+
+    std::vector<int> out_shape = tensors[0]->shape();
+    out_shape[axis] = 0;
+
+    for (auto* t : tensors) {
+        for (int d = 0; d < ndim; ++d) {
+            if (d == axis) continue;
+            if (t->shape()[d] != out_shape[d])
+                throw std::runtime_error("concat: shape mismatch");
+        }
+        out_shape[axis] += t->shape()[axis];
+    }
+    DCUTensor* out = new DCUTensor(out_shape);
+
+    float* out_data = static_cast<float*>(out->data());
+
+    int outer = prod(out_shape, 0, axis);
+    int inner = prod(out_shape, axis + 1, ndim);
+
+    int out_axis_offset = 0;
+
+    for (auto* t : tensors) {
+        int axis_len = t->shape()[axis];
+        int block = axis_len * inner;
+
+        const float* src = static_cast<const float*>(t->data());
+
+        for (int o = 0; o < outer; ++o) {
+            size_t bytes = block * sizeof(float);
+
+            const float* src_ptr =
+                src + o * block;
+
+            float* dst_ptr =
+                out_data + o * (out_shape[axis] * inner)
+                         + out_axis_offset * inner;
+
+            CHECK_HIP(hipMemcpyAsync(
+                dst_ptr,
+                src_ptr,
+                bytes,
+                hipMemcpyDeviceToDevice,
+                ctx->get_stream()
+            ));
+        }
+
+        out_axis_offset += axis_len;
+    }
+
+    return out;
 }
 } // namespace dcu

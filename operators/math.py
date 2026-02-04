@@ -15,61 +15,44 @@ class AddOp(BackendOp):
         tensors[self.outputs[0]] = adapter.add(a, b)
 
 
-@register_operator("MatMul")
-class MatMulOp(BackendOp):
+@register_operator("Sub")
+class SubOp(BackendOp):
     def run(self, tensors, adapter: BackendAdapter):
-        """
-        矩阵乘法算子
-        对两个输入矩阵执行矩阵乘法: y = a @ b
-        """
         a = tensors[self.inputs[0]]
         b = tensors[self.inputs[1]]
-        tensors[self.outputs[0]] = adapter.matmul(a, b)
+        tensors[self.outputs[0]] = adapter.sub(a, b)
 
 
-@register_operator("Gemm")
-class GemmOp(BackendOp):
-    def __init__(self, name, inputs, outputs, attributes):
-        super().__init__(name, inputs, outputs)
-
-        # ONNX Gemm默认属性
-        self.alpha = 1.0
-        self.beta = 1.0
-        self.transA = 0
-        self.transB = 0
-
-        for attr in attributes:
-            if attr.name == "alpha":
-                self.alpha = attr.f
-            elif attr.name == "beta":
-                self.beta = attr.f
-            elif attr.name == "transA":
-                self.transA = attr.i
-            elif attr.name == "transB":
-                self.transB = attr.i
-
+@register_operator("Mul")
+class MulOp(BackendOp):
     def run(self, tensors, adapter: BackendAdapter):
-        """
-        全连接（Gemm）算子
-        执行 Y = alpha * (A @ B) + beta * C
-        支持矩阵转置选项 transA 和 transB
-        """
-        A = tensors[self.inputs[0]]
-        B = tensors[self.inputs[1]]
-        C = tensors[self.inputs[2]] if len(self.inputs) > 2 else None
+        a = tensors[self.inputs[0]]
+        b = tensors[self.inputs[1]]
+        tensors[self.outputs[0]] = adapter.mul(a, b)
 
-        if self.transA:
-            A = adapter.transpose(A)
-        if self.transB:
-            B = adapter.transpose(B)
 
-        Y = adapter.matmul(A, B)
-        Y = adapter.mul_scalar(Y, self.alpha)
+@register_operator("Div")
+class DivOp(BackendOp):
+    def run(self, tensors, adapter: BackendAdapter):
+        a = tensors[self.inputs[0]]
+        b = tensors[self.inputs[1]]
+        tensors[self.outputs[0]] = adapter.div(a, b)
 
-        if C is not None:
-            Y = adapter.add(Y, adapter.mul_scalar(C, self.beta))
 
-        tensors[self.outputs[0]] = Y
+@register_operator("Pow")
+class PowOp(BackendOp):
+    def run(self, tensors, adapter: BackendAdapter):
+        a = tensors[self.inputs[0]]
+        b = tensors[self.inputs[1]]
+        tensors[self.outputs[0]] = adapter.pow(a, b)
+
+
+@register_operator("Mod")
+class ModOp(BackendOp):
+    def run(self, tensors, adapter: BackendAdapter):
+        a = tensors[self.inputs[0]]
+        b = tensors[self.inputs[1]]
+        tensors[self.outputs[0]] = adapter.mod(a, b)
 
 
 @register_operator("Identity")
@@ -77,7 +60,7 @@ class IdentityOp(BackendOp):
     def run(self, tensors, adapter: BackendAdapter):
         """
         恒等算子
-        将输入直接拷贝到输出，不做任何计算
+        将输入直接拷贝到输出
         """
         x = tensors[self.inputs[0]]
         tensors[self.outputs[0]] = x

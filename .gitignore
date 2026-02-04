@@ -1,4 +1,5 @@
 .idea
 .venv
 gui/config/*
-trace/*
+gui/performance/*
+trace/trace.json

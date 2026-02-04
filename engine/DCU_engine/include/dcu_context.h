@@ -1,11 +1,13 @@
 #pragma once
 #include <hip/hip_runtime.h>
 #include <miopen/miopen.h>
+#include <hipblaslt/hipblaslt.h>
 #include <rocblas/rocblas.h>
-#include "context.h"
-#include "dcu_common.h"
 #include <unordered_map>
 #include <cstring>
+#include "context.h"
+#include "dcu_common.h"
+#include "dcu_tensor.h"
 
 namespace dcu {
 
@@ -50,13 +52,14 @@ public:
 
     hipStream_t& get_stream() { return stream_; }
     miopenHandle_t& get_miopen() { return miopen_; }
+    hipblasLtHandle_t& get_hipblasLt() { return hipblasLt_; }
     rocblas_handle& get_rocblas() { return rocblas_; }
-
     std::unordered_map<ConvKey, ConvFwdCache, ConvKeyHash> conv_algo_cache_; // conv算法缓存
 
 private:
     hipStream_t stream_;
     miopenHandle_t miopen_;
+    hipblasLtHandle_t hipblasLt_;
     rocblas_handle rocblas_;
 };
 

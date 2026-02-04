@@ -48,25 +48,12 @@ set(DTK_LIBS
     ${DTK_ROOT}/lib/libhipfft.so
     ${DTK_ROOT}/lib/libhiprand.so
     ${DTK_ROOT}/lib/libhipblas.so
+    ${DTK_ROOT}/lib/libhipblaslt.so
 )
 
 target_link_libraries(dcu_engine
     PUBLIC
     ${DTK_LIBS}
-)
-
-# 测试可执行文件
-add_executable(test_engine src/test_engine.cpp)
-
-# 测试程序链接 dcu_engine（自动继承 include & lib）
-target_link_libraries(test_engine
-    PRIVATE
-    dcu_engine
-)
-
-# 设置运行时库路径
-set_target_properties(test_engine PROPERTIES
-    BUILD_RPATH "${DTK_ROOT}/lib"
 )
 
 # 添加 bindings.cpp

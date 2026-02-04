@@ -8,12 +8,11 @@ class BatchNormalizationOp(BackendOp):
     def __init__(self, name, inputs, outputs, attributes):
         super().__init__(name, inputs, outputs)
 
-        # ONNX 默认参数
+        # 默认参数
         self.epsilon = 1e-5
         self.momentum = 0.9
-        self.training_mode = 0  # ONNX 推理图中通常为 0
+        self.training_mode = 0
 
-        # 解析 ONNX attributes
         for attr in attributes:
             if attr.name == "epsilon":
                 self.epsilon = attr.f

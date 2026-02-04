@@ -5,7 +5,7 @@ from wrapper.wrapper import ONNXModelWrapper
 
 def compare_torch_and_backend(
     module: torch.nn.Module,
-    input_tensor: torch.Tensor,
+    input_tensor,
     backend="dcu",
     atol=1e-5,
     rtol=1e-5,
@@ -14,20 +14,23 @@ def compare_torch_and_backend(
     module.eval()
 
     with torch.no_grad():
-        torch_out = module(input_tensor)
+        torch_out = module(*input_tensor if isinstance(input_tensor, tuple) else (input_tensor,))
 
     # backend
     backend_model = ONNXModelWrapper(
         module,
-        input_shape=tuple(input_tensor.shape),
+        dummy_inputs=input_tensor,
         backend=backend
     )
 
-    b = backend_model(input_tensor)
+    with torch.no_grad():
+        b = backend_model(input_tensor)
 
     # 转 numpy
     a = torch_out.detach().cpu().numpy()
 
+    # print("expected", a)
+    # print("actual", b)
     max_err = np.max(np.abs(a - b))
     mean_err = np.mean(np.abs(a - b))
 

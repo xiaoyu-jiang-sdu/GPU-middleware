@@ -14,7 +14,7 @@ class BackendAdapter(ABC):
     # 张量管理
     # =========================
     @abstractmethod
-    def tensor(self, data, cache, cache_key):
+    def tensor(self, data, cache=False, cache_key=None):
         # 创建张量
         pass
 
@@ -24,25 +24,30 @@ class BackendAdapter(ABC):
         pass
 
     # =========================
-    # 基础算子
+    # 基础算子, 二元运算符
     # =========================
     @abstractmethod
     def add(self, a, b):
-        # 逐元素加法
         pass
 
     @abstractmethod
-    def matmul(self, a, b):
-        # 矩阵乘
+    def sub(self, a, b):
         pass
 
     @abstractmethod
-    def relu(self, x):
+    def mul(self, a, b):
         pass
 
     @abstractmethod
-    def transpose(self, x):
-        # 转置
+    def div(self, a, b):
+        pass
+
+    @abstractmethod
+    def pow(self, a, b):
+        pass
+
+    @abstractmethod
+    def mod(self, a, b):
         pass
 
     @abstractmethod
@@ -51,13 +56,35 @@ class BackendAdapter(ABC):
         pass
 
     # =========================
-    # CNN算子
+    # NN 算子
     # =========================
+    @abstractmethod
+    def matmul(self, a, b, alpha=1.0, beta=0.0, transA=False, transB=False, C=None):
+        # 矩阵乘
+        pass
+
     @abstractmethod
     def conv2d(self, x, w, b=None, stride=(1, 1), padding=(0, 0)):
         # 2d卷积
         pass
 
+    # =========================
+    # 激活算子
+    # =========================
+    @abstractmethod
+    def relu(self, x):
+        pass
+
+    @abstractmethod
+    def erf(self, x):
+        pass
+
+    @abstractmethod
+    def sqrt(self, x):
+        pass
+    # =========================
+    # 池化算子
+    # =========================
     @abstractmethod
     def global_avg_pool(self, x):
         # 全局平均池化
@@ -67,13 +94,59 @@ class BackendAdapter(ABC):
     def max_pool2d(self, x, kernel_size, stride, padding):
         pass
 
-    @abstractmethod
-    def flatten(self, x, axis):
-        pass
-
     # =========================
     # 归一化
     # =========================
     @abstractmethod
     def batch_norm_2d(self, x, weight, bias, running_mean, running_var, eps):
+        pass
+
+    # =========================
+    # shape view
+    # =========================
+    @abstractmethod
+    def transpose(self, x, perm):
+        # 转置
+        pass
+
+    @abstractmethod
+    def unsqueeze(self, x, axes):
+        # 再x的shape中加入维数
+        pass
+
+    @abstractmethod
+    def reshape(self, x, shape):
+        pass
+
+    # =========================
+    # transform
+    # =========================
+    @abstractmethod
+    def flatten(self, x, axis):
+        pass
+
+    @abstractmethod
+    def concat(self, xs, axis):
+        # 将xs按照axis进行拼接
+        pass
+
+    def squeeze(self, x, axes):
+        pass
+
+    def expand(self, x, shape):
+        pass
+
+    def slice(self, x, starts, ends, axes, steps):
+        pass
+
+    def equal(self, a, b):
+        pass
+
+    def where(self, cond, x, y):
+        pass
+
+    def shape(self, x):
+        pass
+
+    def cast(self, x, to):
         pass

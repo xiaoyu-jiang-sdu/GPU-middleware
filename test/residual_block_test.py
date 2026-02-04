@@ -16,7 +16,7 @@ class ResidualBlockTest(nn.Module):
     def forward(self, x):
         out = F.conv2d(x, self.w1, self.b1, stride=1, padding=1)
         out = F.conv2d(out, self.w2, self.b2, stride=1, padding=1)
-        out = out + x           # residual add
+        out = out + x
         out = F.relu(out)
         return out
 
@@ -27,7 +27,7 @@ def test_residual_block():
     # 输入: [N, C, H, W]
     x = torch.randn(64, 8, 32, 32, device="cpu")
 
-    # 卷积权重: 保持通道数一致，便于残差相加
+    # 卷积权重
     w1 = torch.randn(8, 8, 3, 3, device="cpu")
     w2 = torch.randn(8, 8, 3, 3, device="cpu")
 
