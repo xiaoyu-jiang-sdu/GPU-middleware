@@ -11,6 +11,15 @@ cpu上的np运算
 
 @register_adapter("cpu")
 class CpuAdapter(BackendAdapter):
+    def __init__(self):
+        super().__init__()
+        self.ONNX_TO_NUMPY_DTYPE = {
+            1: np.float32,
+            6: np.int32,
+            7: np.int64,
+            9: np.bool_,
+        }
+
     # =========================
     # 张量管理
     # =========================
@@ -51,6 +60,15 @@ class CpuAdapter(BackendAdapter):
 
     def mul_scalar(self, x, scalar):
         return x * scalar
+
+    # =========================
+    # logical 算子
+    # =========================
+    def equal(self, a, b):
+        return np.equal(a, b)
+
+    def where(self, cond, x, y):
+        return np.where(cond, x, y)
 
     # =========================
     # NN 算子
@@ -173,3 +191,12 @@ class CpuAdapter(BackendAdapter):
 
     def concat(self, xs, axis):
         return np.concatenate(xs, axis=axis)
+
+    # =========================
+    # type_cast
+    # =========================
+    def cast(self, x, to):
+        if to not in self.ONNX_TO_NUMPY_DTYPE.keys():
+            raise RuntimeError(f"Unsupported ONNX Cast to={to}")
+        dtype = self.ONNX_TO_NUMPY_DTYPE[to]
+        return x.astype(dtype, copy=False)

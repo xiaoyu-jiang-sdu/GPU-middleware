@@ -3,18 +3,39 @@ import torch
 
 from adapter.base import BackendAdapter
 from .factory import register_adapter
-import dcu  # pybind11 绑定的模块
+import dcu
 
 
 @register_adapter("dcu")
 class DcuAdapter(BackendAdapter):
-    def __init__(self, **kwargs):
+    def __init__(self):
         # 创建 DCU context 和 engine
         self.ctx = dcu.Context()
         self.engine = dcu.Engine()
 
         # 参数缓存
         self._param_cache = {}
+
+        self.TORCH_TO_DCU_DTYPE = {
+            torch.float32: dcu.FLOAT32,
+            torch.int32:   dcu.INT32,
+            torch.int64:   dcu.INT64,
+            torch.bool:    dcu.UINT8,
+        }
+
+        self.NUMPY_TO_DCU_DTYPE = {
+            np.float32: dcu.FLOAT32,
+            np.int32: dcu.INT32,
+            np.int64: dcu.INT64,
+            np.bool_: dcu.UINT8,
+        }
+
+        self.ONNX_TO_DCU_DTYPE = {
+            1: dcu.FLOAT32,  # FLOAT
+            6: dcu.INT32,  # INT32
+            7: dcu.INT64,  # INT64
+            9: dcu.UINT8,  # BOOL -> uint8
+        }
 
     # =========================
     # 张量管理
@@ -26,27 +47,54 @@ class DcuAdapter(BackendAdapter):
         if isinstance(data, dcu.DCUTensor):
             return data
 
-        if cache and cache_key is not None and cache_key in self._param_cache:
-            return self._param_cache[cache_key]
+        if np.isscalar(data):
+            np_data = np.array(data)
+            np_type = np_data.dtype.type
 
-        # torch.Tensor → numpy
-        if isinstance(data, torch.Tensor):
+            if np_type not in self.NUMPY_TO_DCU_DTYPE:
+                raise TypeError(f"unsupported scalar dtype: {np_data.dtype}")
+
+            dtype = self.NUMPY_TO_DCU_DTYPE[np_type]
+            np_data = np_data.reshape(1)
+
+        elif isinstance(data, torch.Tensor):
             data = data.detach().cpu()
             if data.dim() == 0:
                 data = data.view(1)
-            data = data.contiguous().numpy().astype(np.float32)
+
+            np_data = data.contiguous().numpy()
+
+            if data.dtype not in self.TORCH_TO_DCU_DTYPE:
+                raise TypeError(f"unsupported torch dtype: {data.dtype}")
+
+            dtype = self.TORCH_TO_DCU_DTYPE[data.dtype]
 
         elif isinstance(data, np.ndarray):
             if data.ndim == 0:
                 data = data.reshape(1)
-            data = data.astype(np.float32, copy=False)
+
+            np_data = data
+            np_type = data.dtype.type
+
+            if np_type not in self.NUMPY_TO_DCU_DTYPE:
+                raise TypeError(f"unsupported numpy dtype: {data.dtype}")
+
+            dtype = self.NUMPY_TO_DCU_DTYPE[np_type]
 
         else:
-            data = np.array(data, dtype=np.float32)
-            if data.ndim == 0:
-                data = data.reshape(1)
+            np_data = np.array(data)
+            if np_data.ndim == 0:
+                np_data = np_data.reshape(1)
 
-        t = dcu.DCUTensor(data)
+            np_type = np_data.dtype.type
+
+            if np_type not in self.NUMPY_TO_DCU_DTYPE:
+                raise TypeError(f"unsupported numpy dtype: {np_data.dtype}")
+
+            dtype = self.NUMPY_TO_DCU_DTYPE[np_type]
+
+        t = dcu.DCUTensor(array=np_data, dtype=dtype)
+
         if cache and cache_key is not None:
             self._param_cache[cache_key] = t
 
@@ -89,7 +137,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.add(
             a, b, out,
@@ -101,7 +149,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.sub(
             a, b, out,
@@ -113,7 +161,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.mul(
             a, b, out,
@@ -125,7 +173,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.div(
             a, b, out,
@@ -137,7 +185,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.pow(
             a, b, out,
@@ -149,7 +197,7 @@ class DcuAdapter(BackendAdapter):
         a = self._to_dcu_tensor(a)
         b = self._to_dcu_tensor(b)
         out_shape = self._broadcast_shape(a.shape, b.shape)
-        out = dcu.DCUTensor(list(out_shape), dtype=a.dtype)
+        out = dcu.DCUTensor(shape=list(out_shape), dtype=a.dtype)
 
         self.engine.mod(
             a, b, out,
@@ -159,8 +207,25 @@ class DcuAdapter(BackendAdapter):
 
     def mul_scalar(self, x, scalar):
         x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=x.shape, dtype=x.dtype)
         self.engine.mul_scalar(x, out, float(scalar), self.ctx)
+        return out
+
+    # =========================
+    # logical 算子
+    # =========================
+    def equal(self, a, b):
+        a = self._to_dcu_tensor(a)
+        b = self._to_dcu_tensor(b)
+        out = dcu.DCUTensor(shape=a.shape, dtype=dcu.UINT8)
+        self.engine.equal(a, b, out, self.ctx)
+        return out
+
+    def where(self, cond, x, y):
+        x = self._to_dcu_tensor(x)
+        y = self._to_dcu_tensor(y)
+        out = dcu.DCUTensor(shape=cond.shape, dtype=x.dtype)
+        self.engine.where(cond, x, y, out, self.ctx)
         return out
 
     # =========================
@@ -188,7 +253,7 @@ class DcuAdapter(BackendAdapter):
 
         # 输出 shape
         out_shape = batch_shape + (M, N)
-        out = dcu.DCUTensor(out_shape, dtype=a.dtype)
+        out = dcu.DCUTensor(shape=out_shape, dtype=a.dtype)
 
         self.engine.matmul(a, b, out, transA, transB, alpha, beta, self.ctx)
 
@@ -211,7 +276,7 @@ class DcuAdapter(BackendAdapter):
         Ho = (H + 2 * pad_h - dilation_h * (R - 1) - 1) // stride_h + 1
         Wo = (W + 2 * pad_w - dilation_w * (S - 1) - 1) // stride_w + 1
 
-        out = dcu.DCUTensor([N, K, Ho, Wo], dtype=x.dtype)
+        out = dcu.DCUTensor(shape=[N, K, Ho, Wo], dtype=x.dtype)
         self.engine.conv2d(x, w, out,
                            N, C, H, W,
                            K, R, S,
@@ -233,19 +298,19 @@ class DcuAdapter(BackendAdapter):
     # =========================
     def relu(self, x):
         x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=x.shape, dtype=x.dtype)
         self.engine.relu(x, out, self.ctx)
         return out
 
     def erf(self, x):
         x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=x.shape, dtype=x.dtype)
         self.engine.erf(x, out, self.ctx)
         return out
 
     def sqrt(self, x):
         x = self._to_dcu_tensor(x)
-        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=x.shape, dtype=x.dtype)
         self.engine.sqrt(x, out, self.ctx)
         return out
 
@@ -257,7 +322,7 @@ class DcuAdapter(BackendAdapter):
         N, C, H, W = x.shape
         outH = (H + 2*padding[0] - kernel_size[0]) // stride[0] + 1
         outW = (W + 2*padding[1] - kernel_size[1]) // stride[1] + 1
-        out = dcu.DCUTensor([N, C, outH, outW], dtype=x.dtype)
+        out = dcu.DCUTensor(shape=[N, C, outH, outW], dtype=x.dtype)
         self.engine.max_pool2d(x, out,
                                N, C, H, W,
                                kernel_size[0], kernel_size[1],
@@ -269,7 +334,7 @@ class DcuAdapter(BackendAdapter):
     def global_avg_pool(self, x):
         x = self._to_dcu_tensor(x)
         N, C, H, W = x.shape
-        out = dcu.DCUTensor([N, C, 1, 1], dtype=x.dtype)  # 保留 1x1 输出维度
+        out = dcu.DCUTensor(shape=[N, C, 1, 1], dtype=x.dtype)  # 保留 1x1 输出维度
         self.engine.global_avg_pool(x, out, N, C, H, W, self.ctx)
         return out
 
@@ -283,7 +348,7 @@ class DcuAdapter(BackendAdapter):
         running_mean = self._to_dcu_tensor(running_mean, cache=True, cache_key=id(running_mean))
         running_var = self._to_dcu_tensor(running_var, cache=True, cache_key=id(running_var))
 
-        out = dcu.DCUTensor(x.shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=x.shape, dtype=x.dtype)
         N, C, H, W = x.shape
         self.engine.batch_norm_2d(x, out,
                                   weight, bias,
@@ -325,10 +390,23 @@ class DcuAdapter(BackendAdapter):
         inner = int(np.prod(shape[axis:], dtype=np.int64))
         out_shape = [outer, inner]
 
-        out = dcu.DCUTensor(out_shape, dtype=x.dtype)
+        out = dcu.DCUTensor(shape=out_shape, dtype=x.dtype)
         self.engine.flatten(x, out, axis, self.ctx)
         return out
 
     def concat(self, xs, axis):
         dcu_tensors = [self._to_dcu_tensor(x) for x in xs]
         return self.engine.concat(dcu_tensors, axis, self.ctx)
+
+    # =========================
+    # type_cast
+    # =========================
+    def cast(self, x, to):
+        if to not in self.ONNX_TO_DCU_DTYPE.keys():
+            raise RuntimeError(f"Unsupported ONNX Cast to={to}")
+        dtype = self.ONNX_TO_DCU_DTYPE[to]
+
+        out = dcu.DCUTensor(shape=x.shape, dtype=dtype)
+        self.engine.cast(x, out, self.ctx)
+
+        return out

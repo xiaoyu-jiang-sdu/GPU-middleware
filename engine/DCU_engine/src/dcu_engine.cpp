@@ -82,6 +82,34 @@ void DCUEngine::mul_scalar(DCUTensor* x, DCUTensor* o, float s, DCUContext* ctx)
 }
 
 // ------------------------
+// equal 实现
+// ------------------------
+void DCUEngine::equal(DCUTensor* a, DCUTensor* b, DCUTensor* out, DCUContext* ctx)
+{
+    binary_op_impl<EqualOp>(a, b, out, ctx);
+}
+
+// ------------------------
+// not_equal 实现
+// ------------------------
+void DCUEngine::not_equal(DCUTensor* a, DCUTensor* b, DCUTensor* out, DCUContext* ctx)
+{
+    binary_op_impl<NotEqualOp>(a, b, out, ctx);
+}
+
+
+// ------------------------
+// where 实现
+// ------------------------
+void DCUEngine::where(DCUTensor* cond, DCUTensor* x, DCUTensor* y, DCUTensor* out, DCUContext* ctx)
+{
+    DISPATCH_DTYPE(x->dtype(), [&](auto dtype_enum) {
+        using T = typename engine::CType<decltype(dtype_enum)::value>::type;
+        where_op_impl<T>(cond, x, y, out, ctx);
+    });
+}
+
+// ------------------------
 // matmul 实现
 // ------------------------
 void DCUEngine::matmul(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
@@ -722,5 +750,37 @@ DCUTensor* DCUEngine::concat(
     }
 
     return out;
+}
+// ------------------------
+// cast 实现
+// ------------------------
+void DCUEngine::cast(DCUTensor* x, DCUTensor* out, DCUContext* ctx)
+{
+    int total = x->size();
+    if (total == 0) return;
+
+    dim3 block(256);
+    dim3 grid((total + block.x - 1) / block.x);
+
+    auto dispatch_in = [&](auto in_enum) {
+        using InT = typename engine::CType<in_enum>::type;
+
+        auto dispatch_out = [&](auto out_enum) {
+            using OutT = typename engine::CType<out_enum>::type;
+
+            hipLaunchKernelGGL(
+                (cast_kernel<InT, OutT>),
+                grid, block, 0, ctx->get_stream(),
+                static_cast<const InT*>(x->data()),
+                static_cast<OutT*>(out->data()),
+                total
+            );
+        };
+
+        DISPATCH_ALL_TYPE(out->dtype(), dispatch_out);
+    };
+
+    DISPATCH_ALL_TYPE(x->dtype(), dispatch_in);
+    CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
 }
 } // namespace dcu

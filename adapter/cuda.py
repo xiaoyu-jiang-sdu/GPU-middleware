@@ -19,6 +19,12 @@ class CudaAdapter(BackendAdapter):
 
         # 参数张量缓存
         self._param_cache = {}
+        self.ONNX_TO_TORCH_DTYPE = {
+            1: torch.float32,  # FLOAT
+            6: torch.int32,  # INT32
+            7: torch.int64,  # INT64
+            9: torch.bool,  # BOOL
+        }
 
     # 张量迁移，采用缓存方式避免重复
     def _to_device(self, tensor, cache=False, cache_key=None):
@@ -93,6 +99,19 @@ class CudaAdapter(BackendAdapter):
     def mul_scalar(self, x, scalar: float):
         x = self._to_device(x)
         return x * scalar
+
+    # =========================
+    # logical 算子
+    # =========================
+    def equal(self, a, b):
+        a = self._to_device(a)
+        b = self._to_device(b)
+        return torch.eq(a, b)
+
+    def where(self, cond, x, y):
+        x = self._to_device(x)
+        y = self._to_device(y)
+        return torch.where(cond, x, y)
 
     # =========================
     # NN 算子
@@ -226,3 +245,12 @@ class CudaAdapter(BackendAdapter):
     def concat(self, xs, axis):
         xs = self._to_device(xs)
         return torch.cat(xs, dim=axis)
+
+    # =========================
+    # type_cast
+    # =========================
+    def cast(self, x, to):
+        if to not in self.ONNX_TO_TORCH_DTYPE.keys():
+            raise RuntimeError(f"Unsupported ONNX Cast to={to}")
+        dtype = self.ONNX_TO_TORCH_DTYPE[to]
+        return x.to(dtype)

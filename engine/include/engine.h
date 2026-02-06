@@ -11,7 +11,7 @@ public:
     virtual ~Engine() = default;
 
     // ------------------------
-    // 二元运算OP
+    // 二元运算算子
     // ------------------------
     virtual void add(T* a, T* b, T* out, Ctx* ctx) = 0;
     virtual void sub(T* a, T* b, T* out, Ctx* ctx) = 0;
@@ -20,6 +20,13 @@ public:
     virtual void pow(T* a, T* b, T* out, Ctx* ctx) = 0;
     virtual void mod(T* a, T* b, T* out, Ctx* ctx) = 0;
     virtual void mul_scalar(T* x, T* out, float s, Ctx* ctx) = 0;
+
+    // ------------------------
+    // logical 算子
+    // ------------------------
+    virtual void equal(T* a, T* b, T* out, Ctx* ctx) = 0;
+    virtual void not_equal(T* a, T* b, T* out, Ctx* ctx) = 0;
+    virtual void where(T* cond, T* x, T* y, T* out, Ctx* ctx) = 0;
 
     // ------------------------
     // NN算子
@@ -81,6 +88,11 @@ public:
                          int axis,
                          Ctx* ctx) = 0;
     virtual T* concat(const std::vector<T*>& inputs, int axis, Ctx* ctx) = 0;
+
+    // ------------------------
+    // type cast
+    // ------------------------
+    virtual void cast(T* x, T* out, Ctx* ctx) = 0;
 };
 
 } // namespace engine

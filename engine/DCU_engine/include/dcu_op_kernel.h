@@ -23,7 +23,9 @@ inline static std::vector<int> compute_broadcast_shape(
         int b_dim = (i < ndim - (int)b_shape.size()) ? 1 : b_shape[i - (ndim - b_shape.size())];
 
         if (a_dim != b_dim && a_dim != 1 && b_dim != 1) {
-            throw std::runtime_error("Invalid broadcast shapes");
+            throw std::runtime_error(
+                "Invalid broadcast shapes: a_dim=" + std::to_string(a_dim) +
+                " b_dim=" + std::to_string(b_dim));
         }
         out_shape[i] = std::max(a_dim, b_dim);
     }
@@ -67,31 +69,31 @@ void binary_op_impl(
     }
 
     dcu::DeviceArray<int> d_out_shape(out_shape, ctx->get_stream());
-    dcu::DeviceArray<int> d_a_shape(a_shape_al, ctx->get_stream());
-    dcu::DeviceArray<int> d_b_shape(b_shape_al, ctx->get_stream());
     dcu::DeviceArray<int> d_a_strides(a_strides_al, ctx->get_stream());
     dcu::DeviceArray<int> d_b_strides(b_strides_al, ctx->get_stream());
 
     dim3 block(256);
     dim3 grid((total + block.x - 1) / block.x);
 
-    DISPATCH_DTYPE(a->dtype(), [&](auto dtype_enum) {
-        using T = typename engine::CType<decltype(dtype_enum)::value>::type;
+    auto dispatch_func = [&](auto dtype_enum) {
+        using InT = typename engine::CType<dtype_enum>::type;
+        using OpT = Op<InT>;
+        using OutT = typename engine::op_out_type<OpT, InT>::type;
         hipLaunchKernelGGL(
-            (binary_strided_kernel<T, Op<T>>),
+            (binary_strided_kernel<InT, OutT, OpT>),
             grid, block, 0, ctx->get_stream(),
-            static_cast<const T*>(a->data()),
-            static_cast<const T*>(b->data()),
-            static_cast<T*>(out->data()),
+            static_cast<const InT*>(a->data()),
+            static_cast<const InT*>(b->data()),
+            static_cast<OutT*>(out->data()),
             d_out_shape.data(),
-            d_a_shape.data(),
-            d_b_shape.data(),
             d_a_strides.data(),
             d_b_strides.data(),
+            out->d_strides(),
             ndim,
             total
         );
-    });
+    };
+    DISPATCH_DTYPE(a->dtype(), dispatch_func);
     CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
 }
 
@@ -170,6 +172,69 @@ void unary_scalar_op_impl(
     CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
 }
 
+template <typename T>
+void where_op_impl(
+    DCUTensor* cond,
+    DCUTensor* x,
+    DCUTensor* y,
+    DCUTensor* out,
+    DCUContext* ctx)
+{
+    int ndim = out->ndim();
+    size_t total = out->size();
+
+    dim3 block(256);
+    dim3 grid((total + block.x - 1) / block.x);
+
+    auto align_shape_stride = [&](DCUTensor* t, std::vector<int>& shape_al, std::vector<int>& stride_al) {
+        int t_ndim = t->ndim();
+        shape_al.assign(ndim, 1);
+        stride_al.assign(ndim, 0);
+
+        // 对齐到输出 ndim
+        for (int i = 0; i < t_ndim; ++i) {
+            shape_al[ndim - t_ndim + i] = t->shape()[i];
+            stride_al[ndim - t_ndim + i] = t->strides()[i];
+        }
+
+        for (int i = 0; i < ndim; ++i) {
+            if (shape_al[i] == 1) stride_al[i] = 0;
+        }
+    };
+
+    std::vector<int> cond_shape_al(ndim), x_shape_al(ndim), y_shape_al(ndim);
+    std::vector<int> cond_strides_al(ndim), x_strides_al(ndim), y_strides_al(ndim);
+
+    align_shape_stride(cond, cond_shape_al, cond_strides_al);
+    align_shape_stride(x, x_shape_al, x_strides_al);
+    align_shape_stride(y, y_shape_al, y_strides_al);
+
+    dcu::DeviceArray<int> d_shape(out->shape(), ctx->get_stream());
+    dcu::DeviceArray<int> d_cond_strides(cond_strides_al, ctx->get_stream());
+    dcu::DeviceArray<int> d_x_strides(x_strides_al, ctx->get_stream());
+    dcu::DeviceArray<int> d_y_strides(y_strides_al, ctx->get_stream());
+    dcu::DeviceArray<int> d_out_strides(out->strides(), ctx->get_stream());
+
+    hipLaunchKernelGGL(
+        (where_strided_kernel<T>),
+        grid, block, 0, ctx->get_stream(),
+        static_cast<const uint8_t*>(cond->data()),
+        static_cast<const T*>(x->data()),
+        static_cast<const T*>(y->data()),
+        static_cast<T*>(out->data()),
+        d_shape.data(),
+        d_cond_strides.data(),
+        d_x_strides.data(),
+        d_y_strides.data(),
+        d_out_strides.data(),
+        ndim,
+        total
+    );
+
+    CHECK_HIP(hipStreamSynchronize(ctx->get_stream()));
+}
+
+// 矩阵乘法template， 支持batch
 template <typename T>
 void matmul_template(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
                      bool transA, bool transB,
@@ -252,7 +317,7 @@ void matmul_template(DCUTensor* A, DCUTensor* B, DCUTensor* Out,
         static_cast<const float*>(B->data()), lda, strideA,
         static_cast<const float*>(A->data()), ldb, strideB,
         &beta_h,
-        static_cast<float*>(Out->data()),     ldc, strideC
+        static_cast<float*>(Out->data()),     ldc, strideC,
         batch
     );
 

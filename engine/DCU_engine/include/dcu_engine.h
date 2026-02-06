@@ -27,6 +27,13 @@ public:
     void mul_scalar(DCUTensor*, DCUTensor*, float, DCUContext*) override;
 
     // ------------------------
+    // logical 算子
+    // ------------------------
+    void equal(DCUTensor*, DCUTensor*, DCUTensor*, DCUContext*) override;
+    void not_equal(DCUTensor*, DCUTensor*, DCUTensor*, DCUContext*) override;
+    void where(DCUTensor*, DCUTensor*, DCUTensor*, DCUTensor*, DCUContext*) override;
+
+    // ------------------------
     // NN算子
     // ------------------------
     void matmul(DCUTensor*, DCUTensor*, DCUTensor*,
@@ -84,6 +91,11 @@ public:
     // ------------------------
     void flatten(DCUTensor*, DCUTensor*, int, DCUContext*) override;
     DCUTensor* concat(const std::vector<DCUTensor*>&, int, DCUContext*) override;
+
+    // ------------------------
+    // type cast
+    // ------------------------
+    void cast(DCUTensor* x, DCUTensor* out, DCUContext* ctx) override;
 };
 
 } // namespace dcu

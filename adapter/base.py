@@ -56,6 +56,17 @@ class BackendAdapter(ABC):
         pass
 
     # =========================
+    # logical 算子
+    # =========================
+    @abstractmethod
+    def equal(self, a, b):
+        pass
+
+    @abstractmethod
+    def where(self, cond, x, y):
+        pass
+
+    # =========================
     # NN 算子
     # =========================
     @abstractmethod
@@ -130,6 +141,13 @@ class BackendAdapter(ABC):
         # 将xs按照axis进行拼接
         pass
 
+    # =========================
+    # type_cast
+    # =========================
+    @abstractmethod
+    def cast(self, x, to):
+        pass
+
     def squeeze(self, x, axes):
         pass
 
@@ -139,14 +157,5 @@ class BackendAdapter(ABC):
     def slice(self, x, starts, ends, axes, steps):
         pass
 
-    def equal(self, a, b):
-        pass
-
-    def where(self, cond, x, y):
-        pass
-
     def shape(self, x):
-        pass
-
-    def cast(self, x, to):
         pass

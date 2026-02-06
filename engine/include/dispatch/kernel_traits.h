@@ -1,6 +1,5 @@
 #pragma once
 #include "dtype.h"
-#include <miopen/miopen.h>
 
 namespace engine {
 
@@ -23,7 +22,18 @@ struct CType<DataType::INT64> {
 };
 
 template <>
-struct CType<DataType::BOOL> {
-    using type = bool;
+struct CType<DataType::UINT8> {
+    using type = uint8_t;
+};
+
+template <typename OpT, typename InT, typename = void>
+struct op_out_type {
+    using type = InT;
+};
+
+// 如果 OpT::OutType 存在
+template <typename OpT, typename InT>
+struct op_out_type<OpT, InT, std::void_t<typename OpT::OutType>> {
+    using type = typename OpT::OutType;
 };
 } // namespace engine
